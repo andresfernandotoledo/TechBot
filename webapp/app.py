@@ -26,7 +26,7 @@ from techbot.calculators.cctv_calc import (
     BITRATE_TABLE, RESOLUTIONS, CODECS,
     SMART_CODECS, SCENE_FACTORS, RESOLUTION_INFO,
 )
-from techbot.scripts import network_scripts, system_scripts
+from techbot.scripts import network_scripts, system_scripts, dhcp_scripts, dns_scripts, security_scripts
 from techbot.apis.hikvision_api import HikvisionClient, HIKVISION_API
 from techbot.apis.dahua_api import DahuaClient, DAHUA_API
 from techbot.apis.zkteco_api import ZKTecoClient, ZKTECO_API
@@ -992,18 +992,24 @@ def _list_script_funcs(mod):
                    if not n.startswith("_") and getattr(o, '__module__', None) == nombre])
 
 
+SCRIPTS_MODULES = {
+    "network": network_scripts,
+    "dhcp": dhcp_scripts,
+    "dns": dns_scripts,
+    "security": security_scripts,
+    "system": system_scripts,
+}
+
+
 @app.route("/api/scripts")
 def api_scripts():
-    return jsonify({
-        "network": _list_script_funcs(network_scripts),
-        "system": _list_script_funcs(system_scripts),
-    })
+    return jsonify({name: _list_script_funcs(mod) for name, mod in SCRIPTS_MODULES.items()})
 
 
 @app.route("/api/scripts/<category>/<func_name>")
 def api_script_source(category, func_name):
     import inspect
-    mod = {"network": network_scripts, "system": system_scripts}.get(category)
+    mod = SCRIPTS_MODULES.get(category)
     if not mod:
         return jsonify({"error": "Categoria no valida"}), 400
     fn = getattr(mod, func_name, None)
@@ -1019,7 +1025,7 @@ def api_script_source(category, func_name):
 
 @app.route("/api/scripts/<category>/full")
 def api_script_full(category):
-    mod = {"network": network_scripts, "system": system_scripts}.get(category)
+    mod = SCRIPTS_MODULES.get(category)
     if not mod:
         return jsonify({"error": "Categoria no valida"}), 400
     try:
