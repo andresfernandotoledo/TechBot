@@ -2,335 +2,487 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>TechBot</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --card: #1a1d27;
-    --card2: #222638;
+    --bg: #0a0c12;
+    --surface: #12141e;
+    --surface2: #1a1d2a;
+    --surface3: #232738;
     --accent: #22d3ee;
     --accent2: #818cf8;
-    --text: #e2e8f0;
-    --text2: #94a3b8;
+    --text: #e8edf5;
+    --text2: #8892a8;
     --danger: #ef4444;
     --success: #22c55e;
     --warning: #f59e0b;
-    --radius: 12px;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --nav-height: 64px;
   }
-  * { margin:0; padding:0; box-sizing:border-box; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { height: -webkit-fill-available; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    padding-bottom: 80px;
+    min-height: -webkit-fill-available;
+    padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 8px);
+    overflow-x: hidden;
   }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+  /* ─── HEADER ─── */
   .header {
-    background: linear-gradient(135deg, var(--card), var(--card2));
-    padding: 20px 16px;
+    background: var(--surface);
+    padding: 16px 16px 12px;
     text-align: center;
-    border-bottom: 1px solid #2a2d3a;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     position: sticky;
     top: 0;
     z-index: 100;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
   }
   .header h1 {
-    font-size: 22px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-  .header p { font-size: 13px; color: var(--text2); margin-top: 4px; }
-  .container { max-width: 800px; margin: 0 auto; padding: 12px; }
+  .header p { font-size: 12px; color: var(--text2); margin-top: 2px; letter-spacing: 0.2px; }
 
+  /* ─── CONTAINER ─── */
+  .container { max-width: 800px; margin: 0 auto; padding: 12px 14px calc(80px + var(--safe-bottom)); }
+
+  /* ─── SEARCH ─── */
   .search-box {
-    background: var(--card);
-    border: 1px solid #2a2d3a;
-    border-radius: var(--radius);
-    padding: 12px 16px;
-    margin-bottom: 16px;
     display: flex;
     gap: 8px;
+    margin-bottom: 16px;
   }
   .search-box input {
     flex: 1;
-    background: transparent;
-    border: none;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
     color: var(--text);
     font-size: 15px;
     outline: none;
+    transition: border 0.2s;
   }
+  .search-box input:focus { border-color: var(--accent); }
   .search-box input::placeholder { color: var(--text2); }
   .search-box button {
     background: var(--accent);
     border: none;
     color: #000;
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-weight: 600;
+    padding: 0 18px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
     font-size: 13px;
     cursor: pointer;
+    transition: opacity 0.2s;
   }
+  .search-box button:active { opacity: 0.7; }
 
+  /* ─── HOME GRID ─── */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
     margin-bottom: 16px;
   }
-  .card {
-    background: var(--card);
-    border: 1px solid #2a2d3a;
+  .card, .home-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.06);
     border-radius: var(--radius);
-    padding: 16px 12px;
+    padding: 14px 8px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
     text-align: center;
+    user-select: none;
   }
-  .card:active { transform: scale(0.96); }
-  .card .icon { font-size: 28px; margin-bottom: 8px; }
-  .card .label { font-size: 13px; font-weight: 600; }
-  .card .count { font-size: 11px; color: var(--text2); margin-top: 4px; }
+  .card:active, .home-card:active { transform: scale(0.95); background: var(--surface2); }
+  .card .icon, .home-card .icon { font-size: 26px; margin-bottom: 6px; display: block; }
+  .card .label, .home-card .label { font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .card .count, .home-card .count { font-size: 10px; color: var(--text2); margin-top: 3px; }
 
+  /* ─── SECTION CARDS ─── */
   .section {
-    background: var(--card);
-    border: 1px solid #2a2d3a;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.06);
     border-radius: var(--radius);
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+    overflow: hidden;
   }
   .section-header {
     padding: 14px 16px;
     font-weight: 600;
-    font-size: 15px;
-    border-bottom: 1px solid #2a2d3a;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
   }
-  .section-body { padding: 12px 16px; }
+  .section-body { padding: 12px 14px; }
 
-  .backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 200;
-    justify-content: center;
-    align-items: flex-end;
+  /* ─── TABS ─── */
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
   }
-  .backdrop.active { display: flex; }
-  .modal {
-    background: var(--card);
-    border-radius: var(--radius) var(--radius) 0 0;
-    width: 100%;
-    max-width: 800px;
-    max-height: 85vh;
-    overflow-y: auto;
-    padding: 20px;
-    animation: slideUp 0.3s ease;
-  }
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-  .modal h2 { font-size: 18px; margin-bottom: 12px; }
-  .modal-close {
-    float: right;
-    background: none;
-    border: none;
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    background: var(--surface2);
     color: var(--text2);
-    font-size: 24px;
-    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
   }
+  .tab:active { opacity: 0.7; }
+  .tab.active { background: var(--accent); color: #000; font-weight: 700; }
 
+  /* ─── BADGES ─── */
   .badge {
     display: inline-block;
-    padding: 3px 10px;
+    padding: 2px 10px;
     border-radius: 20px;
     font-size: 11px;
     font-weight: 600;
   }
-  .badge-accent { background: rgba(34,211,238,0.15); color: var(--accent); }
-  .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
-  .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .badge-accent { background: rgba(34,211,238,0.12); color: var(--accent); }
+  .badge-success { background: rgba(34,197,94,0.12); color: var(--success); }
+  .badge-danger { background: rgba(239,68,68,0.12); color: var(--danger); }
+  .badge-warning { background: rgba(245,158,11,0.12); color: var(--warning); }
 
+  /* ─── CMD ITEM ─── */
   .cmd-item {
     padding: 10px 0;
-    border-bottom: 1px solid #2a2d3a;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+    font-size: 12px;
   }
   .cmd-item:last-child { border-bottom: none; }
   .cmd-item .cmd { color: var(--accent); word-break: break-all; }
-  .cmd-item .desc { color: var(--text2); font-size: 12px; margin-top: 2px; }
+  .cmd-item .desc { color: var(--text2); font-size: 11px; margin-top: 2px; }
 
-  .input-group {
-    margin-bottom: 12px;
-  }
+  /* ─── INPUTS ─── */
+  .input-group { margin-bottom: 12px; }
   .input-group label {
     display: block;
-    font-size: 13px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--text2);
-    margin-bottom: 4px;
+    margin-bottom: 5px;
   }
   .input-group input, .input-group select {
     width: 100%;
-    background: var(--card2);
-    border: 1px solid #2a2d3a;
-    border-radius: 8px;
-    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
     color: var(--text);
-    font-size: 14px;
+    font-size: 15px;
     outline: none;
+    transition: border 0.2s;
+    -webkit-appearance: none;
+    appearance: none;
   }
   .input-group input:focus { border-color: var(--accent); }
+
+  /* ─── BUTTONS ─── */
   .btn {
     background: var(--accent);
     color: #000;
     border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 600;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
     font-size: 14px;
     cursor: pointer;
     width: 100%;
+    transition: opacity 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
   }
+  .btn:active { opacity: 0.75; }
   .btn-outline {
     background: transparent;
-    border: 1px solid #2a2d3a;
+    border: 1px solid rgba(255,255,255,0.12);
     color: var(--text);
   }
+  .btn-outline:active { background: var(--surface3); }
   .btn-danger { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 8px 14px; font-size: 12px; }
 
+  /* ─── RESULT BOX ─── */
   .result-box {
-    background: var(--card2);
-    border-radius: 8px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
     padding: 12px;
-    margin-top: 12px;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
+    margin-top: 10px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
     white-space: pre-wrap;
     word-break: break-all;
-    max-height: 300px;
+    max-height: 320px;
     overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.04);
   }
 
-  .tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 12px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+  /* ─── MODAL ─── */
+  .backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 300;
+    justify-content: center;
+    align-items: flex-end;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
-  .tab {
-    padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-    white-space: nowrap;
-    background: var(--card2);
-    color: var(--text2);
+  .backdrop.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius) var(--radius) 0 0;
+    width: 100%;
+    max-width: 800px;
+    max-height: 82vh;
+    overflow-y: auto;
+    padding: 20px;
+    animation: slideUp 0.25s ease;
+    padding-bottom: calc(20px + var(--safe-bottom));
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+  .modal-close {
+    float: right;
+    background: var(--surface2);
     border: none;
+    color: var(--text2);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
   }
-  .tab.active { background: var(--accent); color: #000; font-weight: 600; }
 
-  @media(min-width:768px){
-    .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-    .modal { border-radius: var(--radius); margin: auto; max-height: 80vh; }
+  /* ─── BOTTOM NAV ─── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    padding: 6px 4px;
+    padding-bottom: calc(6px + var(--safe-bottom));
+    z-index: 150;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    height: var(--nav-height);
+  }
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
+    background: transparent;
+    border: none;
+    color: var(--text2);
+    position: relative;
+  }
+  .nav-item:active { background: var(--surface2); }
+  .nav-item.active { color: var(--accent); }
+  .nav-item .nav-icon { font-size: 20px; }
+  .nav-item .nav-label { font-size: 9px; font-weight: 600; letter-spacing: 0.3px; }
+  .nav-item .nav-badge {
+    position: absolute;
+    top: 2px;
+    right: 50%;
+    transform: translateX(calc(50% + 12px));
+    background: var(--danger);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+  }
+
+  /* ─── TOAST ─── */
+  .toast-container {
+    position: fixed;
+    top: 60px;
+    left: 14px;
+    right: 14px;
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    animation: toastIn 0.3s ease;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  @keyframes toastIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .toast-success { border-left: 3px solid var(--success); }
+  .toast-error { border-left: 3px solid var(--danger); }
+
+  /* ─── TASKBAR ─── */
+  .taskbar {
+    position: fixed;
+    bottom: calc(var(--nav-height) + 4px);
+    left: 8px;
+    right: 8px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    max-height: 40vh;
+    overflow-y: auto;
+    z-index: 140;
+    display: none;
+    font-size: 13px;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.3);
+  }
+  .taskbar.active { display: block; }
+  .task-item {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .task-item:last-child { border-bottom: none; }
+  .task-status { font-size: 16px; min-width: 22px; }
+  .task-label { flex: 1; word-break: break-word; font-size: 12px; line-height: 1.4; }
+  .task-result {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text2);
+    white-space: pre-wrap;
+    max-height: 60px;
+    overflow-y: auto;
+    margin-top: 3px;
+  }
+
+  /* ─── SCROLLBAR ─── */
+  .section-body, .result-box, .modal { scrollbar-width: thin; }
+
+  /* ─── DESKTOP ─── */
+  @media(min-width: 768px) {
+    .grid { grid-template-columns: repeat(4, 1fr); }
+    .modal { border-radius: var(--radius); margin: auto; max-height: 80vh; max-width: 600px; }
     .backdrop.active { align-items: center; }
+    .bottom-nav { max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; }
+    .toast-container { max-width: 400px; left: 50%; transform: translateX(-50%); }
+    .card:hover, .home-card:hover { border-color: rgba(255,255,255,0.12); }
+  }
+  @media(max-width: 380px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-item .nav-label { font-size: 8px; }
   }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>⚡ TechBot</h1>
-  <p>Asistente técnico · Redes · Sistemas · CCTV</p>
+  <h1>TechBot</h1>
+  <p>Asistente técnico · Redes · CCTV · Sistemas</p>
 </div>
+
+<div class="toast-container" id="toastContainer"></div>
 
 <div class="container">
 
   <div class="search-box">
     <input type="text" id="globalSearch" placeholder="Buscar comandos, protocolos, puertos..." onkeyup="if(event.key==='Enter')globalSearchFn()">
-    <button onclick="globalSearchFn()">Buscar</button>
+    <button onclick="globalSearchFn()">🔍</button>
   </div>
 
-  <div class="grid">
-    <div class="card" onclick="openSection('protocols')">
-      <div class="icon">🌐</div>
-      <div class="label">Protocolos</div>
-      <div class="count">59 protocolos</div>
-    </div>
-    <div class="card" onclick="openSection('ports')">
-      <div class="icon">🔌</div>
-      <div class="label">Puertos</div>
-      <div class="count">644 puertos</div>
-    </div>
-    <div class="card" onclick="openSection('commands')">
-      <div class="icon">⌨️</div>
-      <div class="label">Comandos</div>
-      <div class="count">1000+</div>
-    </div>
-    <div class="card" onclick="openSection('calculators')">
-      <div class="icon">🧮</div>
-      <div class="label">Calculadoras</div>
-      <div class="count">101 funciones</div>
-    </div>
-    <div class="card" onclick="openSection('cctv')">
-      <div class="icon">📷</div>
-      <div class="label">APIs CCTV</div>
-      <div class="count">Hikvision · Dahua · ZKTeco</div>
-    </div>
-    <div class="card" onclick="openSection('diagnostics')">
-      <div class="icon">🔍</div>
-      <div class="label">Diagnóstico</div>
-      <div class="count">8 procedimientos</div>
-    </div>
-    <div class="card" onclick="openSection('scanner')">
-      <div class="icon">🔍</div>
-      <div class="label">Escáner Red</div>
-      <div class="count">Hosts · Puertos · Servicios · SO</div>
-    </div>
-    <div class="card" onclick="openSection('speedtest')">
-      <div class="icon">⚡</div>
-      <div class="label">Speedtest</div>
-      <div class="count">Descarga · Subida · Ping</div>
-    </div>
-    <div class="card" onclick="openSection('mac')">
-      <div class="icon">🏷</div>
-      <div class="label">MAC Lookup</div>
-      <div class="count">OUI · Fabricante · Búsqueda</div>
-    </div>
-    <div class="card" onclick="openSection('snmp')">
-      <div class="icon">📡</div>
-      <div class="label">SNMP</div>
-      <div class="count">Walk · Get · Set · MIBs</div>
-    </div>
-    <div class="card" onclick="openSection('ipam')">
-      <div class="icon">🌐</div>
-      <div class="label">IPAM</div>
-      <div class="count">IPs · Subredes · DHCP · DNS</div>
-    </div>
-    <div class="card" onclick="openSection('access-control')">
-      <div class="icon">🚪</div>
-      <div class="label">Control Acceso</div>
-      <div class="count">Abrir puertas · Usuarios · Eventos</div>
-    </div>
-    <div class="card" onclick="openSection('scripts')">
-      <div class="icon">🐍</div>
-      <div class="label">Scripts Python</div>
-      <div class="count">50+ funciones</div>
-    </div>
-    <div class="card" onclick="openSection('ups')">
-      <div class="icon">🔋</div>
-      <div class="label">UPS</div>
-      <div class="count">Monitoreo · NUT · SNMP</div>
-    </div>
+  <div class="grid" id="homeGrid">
+    <div class="home-card" onclick="openSection('scanner')"><span class="icon">🔍</span><span class="label">Escáner</span><span class="count">Red</span></div>
+    <div class="home-card" onclick="openSection('commands')"><span class="icon">⌨️</span><span class="label">Comandos</span><span class="count">1000+</span></div>
+    <div class="home-card" onclick="openSection('diagnostics')"><span class="icon">🔍</span><span class="label">Diagnóstico</span><span class="count">15 proc.</span></div>
+    <div class="home-card" onclick="openSection('speedtest')"><span class="icon">⚡</span><span class="label">Speedtest</span><span class="count">Internet</span></div>
+    <div class="home-card" onclick="openSection('ups')"><span class="icon">🔋</span><span class="label">UPS</span><span class="count">Monitoreo</span></div>
+    <div class="home-card" onclick="openSection('cctv')"><span class="icon">📷</span><span class="label">APIs CCTV</span><span class="count">3 vendors</span></div>
+    <div class="home-card" onclick="openSection('snmp')"><span class="icon">📡</span><span class="label">SNMP</span><span class="count">MIBs</span></div>
+    <div class="home-card" onclick="openSection('mac')"><span class="icon">🏷</span><span class="label">MAC Lookup</span><span class="count">OUI</span></div>
+    <div class="home-card" onclick="openSection('ipam')"><span class="icon">🌐</span><span class="label">IPAM</span><span class="count">Subredes</span></div>
+    <div class="home-card" onclick="openSection('access-control')"><span class="icon">🚪</span><span class="label">Ctrl. Acceso</span><span class="count">21 vendors</span></div>
+    <div class="home-card" onclick="openSection('protocols')"><span class="icon">🌐</span><span class="label">Protocolos</span><span class="count">59</span></div>
+    <div class="home-card" onclick="openSection('ports')"><span class="icon">🔌</span><span class="label">Puertos</span><span class="count">644</span></div>
+    <div class="home-card" onclick="openSection('calculators')"><span class="icon">🧮</span><span class="label">Calculadoras</span><span class="count">101</span></div>
+    <div class="home-card" onclick="openSection('scripts')"><span class="icon">🐍</span><span class="label">Scripts</span><span class="count">Python</span></div>
   </div>
 
   <div id="results"></div>
+
+  <div id="taskbarToggle" style="display:none" onclick="toggleTaskBar()">📋</div>
+  <div id="taskbar" class="taskbar"></div>
+</div>
+
+<div class="bottom-nav" id="bottomNav">
+  <button class="nav-item" onclick="goHome()"><span class="nav-icon">🏠</span><span class="nav-label">Inicio</span></button>
+  <button class="nav-item" onclick="openSection('scanner')"><span class="nav-icon">🔍</span><span class="nav-label">Escáner</span></button>
+  <button class="nav-item" onclick="openSection('commands')"><span class="nav-icon">⌨️</span><span class="nav-label">Comandos</span></button>
+  <button class="nav-item" onclick="openSection('speedtest')"><span class="nav-icon">⚡</span><span class="nav-label">Speedtest</span></button>
+  <button class="nav-item" id="navTasks" onclick="toggleTaskBar()"><span class="nav-icon">📋</span><span class="nav-label">Tareas</span></button>
 </div>
 
 <div class="backdrop" id="modal" onclick="if(event.target===this)closeModal()">
@@ -348,6 +500,28 @@ function showModal(html) {
   document.getElementById("modalContent").innerHTML = html;
   document.getElementById("modal").classList.add("active");
 }
+
+function goHome() {
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("homeGrid").style.display = "grid";
+  window.__currentSection = "";
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.querySelector(".nav-item:first-child")?.classList.add("active");
+}
+
+function showToast(msg, type) {
+  const c = document.getElementById("toastContainer");
+  const t = document.createElement("div");
+  t.className = "toast toast-" + (type || "success");
+  t.innerHTML = `<span>${type === "error" ? "❌" : "✅"}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = "0"; t.style.transition = "opacity 0.3s"; setTimeout(() => t.remove(), 300); }, 3500);
+}
+
+// Click fuera del modal lo cierra
+document.getElementById("modal")?.addEventListener("click", function(e) {
+  if (e.target === this) closeModal();
+});
 
 // ─── BÚSQUEDA GLOBAL ─────────────────────────────────────────
 
@@ -414,8 +588,27 @@ async function globalSearchFn() {
 
 // ─── SECCIONES ───────────────────────────────────────────────
 
+window.__sectionCache = {};
+window.__currentSection = "";
+
 async function openSection(name) {
   const resultsDiv = document.getElementById("results");
+  document.getElementById("homeGrid").style.display = "none";
+  // Save current section HTML before switching
+  if (window.__currentSection) {
+    window.__sectionCache[window.__currentSection] = resultsDiv.innerHTML;
+  }
+  window.__currentSection = name;
+  // Update bottom nav
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  const navMap = {scanner:1, commands:2, speedtest:3};
+  const idx = navMap[name];
+  if (idx !== undefined) document.querySelectorAll(".nav-item")[idx]?.classList.add("active");
+  // Restore cached HTML if available
+  if (window.__sectionCache[name]) {
+    resultsDiv.innerHTML = window.__sectionCache[name];
+    return;
+  }
   if (name === "protocols") {
     const protos = await (await fetch(`${API}/protocols`)).json();
     let html = "<h3 style='margin-bottom:12px'>🌐 Protocolos de Red</h3>";
@@ -485,11 +678,15 @@ async function openSection(name) {
   else if (name === "diagnostics") {
     const diags = await (await fetch(`${API}/diagnostics`)).json();
     let html = "<h3 style='margin-bottom:12px'>🔍 Procedimientos de Diagnóstico</h3>";
+    html += "<input style='width:100%;padding:10px;border-radius:8px;border:1px solid #2a2d3a;background:#1a1d27;color:#e2e8f0;font-size:14px;margin-bottom:12px;outline:none' placeholder='Filtrar diagnósticos...' oninput='filterDiagnostics(this.value)'>";
+    html += "<div id='diagList'>";
     diags.forEach(d => {
-      html += `<div class='card' style='text-align:left;margin-bottom:6px;padding:12px 14px' onclick='showDiagnostic("${encodeURIComponent(d)}")'>
+      const safeId = d.replace(/[^a-zA-Z0-9]/g, "_");
+      html += `<div class='card diag-card' style='text-align:left;margin-bottom:6px;padding:12px 14px' id='diag_${safeId}' onclick='showDiagnostic("${d.replace(/"/g, "&quot;")}")'>
         <div style='font-weight:600'>${d}</div>
       </div>`;
     });
+    html += "</div>";
     resultsDiv.innerHTML = html;
   }
   else if (name === "scanner") { showScanner(); }
@@ -683,6 +880,28 @@ function renderCommands(q) {
   if (!div) return;
   let html = "";
   q = q.toLowerCase();
+  const flat = window._cmdVendor === "windows";
+  if (flat) {
+    for (const [, subcats] of Object.entries(allCmdsData)) {
+      if (Array.isArray(subcats)) {
+        subcats.forEach(({cmd, desc}) => {
+          if (!q || cmd.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) {
+            html += `<div class='cmd-item'><div class='cmd'>${cmd}</div><div class='desc'>${desc}</div></div>`;
+          }
+        });
+      } else {
+        for (const items of Object.values(subcats)) {
+          items.forEach(({cmd, desc}) => {
+            if (!q || cmd.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) {
+              html += `<div class='cmd-item'><div class='cmd'>${cmd}</div><div class='desc'>${desc}</div></div>`;
+            }
+          });
+        }
+      }
+    }
+    div.innerHTML = html || "<p style='color:var(--text2)'>Sin resultados</p>";
+    return;
+  }
   for (const [cat, subcats] of Object.entries(allCmdsData)) {
     let catHtml = "";
     if (Array.isArray(subcats)) {
@@ -706,7 +925,6 @@ function renderCommands(q) {
     }
     if (catHtml) {
       html += `<div class='section'><div class='section-header'>${cat}</div><div class='section-body'>${catHtml}</div></div>`;
-    }
   }
   div.innerHTML = html || "<p style='color:var(--text2)'>Sin resultados</p>";
 }
@@ -1051,29 +1269,22 @@ function showCCTVForm(vendor, btn) {
   window._cctvSession = null;
 }
 
-async function connectCCTV(vendor) {
+function connectCCTV(vendor) {
   const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = "Conectando...";
-  try {
-    const resp = await fetch(`${API}/cctv/connect`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        vendor,
-        host: document.getElementById("cctv_host").value,
-        port: document.getElementById("cctv_port").value || 80,
-        user: document.getElementById("cctv_user").value || "admin",
-        password: document.getElementById("cctv_pass").value,
-      })
-    });
-    const data = await resp.json();
-    const div = document.getElementById("cctvResult");
+  const body = {
+    vendor,
+    host: document.getElementById("cctv_host").value,
+    port: document.getElementById("cctv_port").value || 80,
+    user: document.getElementById("cctv_user").value || "admin",
+    password: document.getElementById("cctv_pass").value,
+  };
+  asyncFetchPost("Conectar CCTV " + vendor, `${API}/cctv/connect`, body, "cctvResult", (data, el, error) => {
+    if (error) { el.innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${escapeHtml(error)}</div>`; return; }
     if (data.online) {
       window._cctvSession = data.session;
       let infoHtml = Object.entries(data.info).map(([k,v]) => `<div class='cmd-item'><span style='color:var(--accent2)'>${k}:</span> ${v}</div>`).join("");
       let methodsHtml = data.methods.map(m => `<button class='btn btn-outline' style='margin-bottom:4px;font-size:12px;padding:6px;width:auto' onclick='execCCTV("${m}")'>${m}()</button>`).join(" ");
-      div.innerHTML = `
+      el.innerHTML = `
         <div class='section'>
           <div class='section-header' style='color:var(--success)'>✅ Conectado</div>
           <div class='section-body'>
@@ -1085,73 +1296,220 @@ async function connectCCTV(vendor) {
         </div>
       `;
     } else {
-      div.innerHTML = `<div class='result-box' style='color:var(--danger)'>❌ ${data.error || "No se pudo conectar"}</div>`;
+      el.innerHTML = `<div class='result-box' style='color:var(--danger)'>❌ ${data.error || "No se pudo conectar"}</div>`;
     }
-  } catch(e) {
-    document.getElementById("cctvResult").innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${e.message}</div>`;
-  }
-  btn.disabled = false;
-  btn.textContent = "🔌 Conectar";
+  });
 }
 
-async function execCCTV(method) {
-  const resp = await fetch(`${API}/cctv/command`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({session: window._cctvSession, method})
-  });
-  const data = await resp.json();
-  document.getElementById("cctvCmdResult").innerHTML = `<div class='result-box'>${JSON.stringify(data, null, 2)}</div>`;
+function execCCTV(method) {
+  asyncFetchPost("Ejecutar " + method, `${API}/cctv/command`, {session: window._cctvSession, method}, "cctvCmdResult",
+    (data, el) => { if (el) el.innerHTML = `<div class='result-box'>${JSON.stringify(data, null, 2)}</div>`; }
+  );
 }
 
 // ─── DIAGNÓSTICO ─────────────────────────────────────────────
 
-async function showDiagnostic(encodedName) {
-  const name = decodeURIComponent(encodedName);
-  const resp = await (await fetch(`${API}/diagnostics/${encodeURIComponent(name)}`)).json();
-  showModal(`
-    <button class='modal-close' onclick='closeModal()'>&times;</button>
-    <h2>🔍 ${resp.name}</h2>
-    <div class='result-box'>${resp.content}</div>
-  `);
+function showDiagnostic(name) {
+  const encoded = name.split("/").map(s => encodeURIComponent(s)).join("/");
+  asyncFetch(`/api/diagnostics/${encoded}`, null,
+    r => {
+      if (r.error) return showModal(`<div class='result-box' style='color:var(--danger)'>${r.error}</div>`);
+      showModal(`
+        <button class='modal-close' onclick='closeModal()'>&times;</button>
+        <h2>🔍 ${escapeHtml(r.name)}</h2>
+        <div class='result-box' style='max-height:70vh;font-size:12px'>${escapeHtml(r.content)}</div>
+      `);
+      return "";
+    }
+  );
 }
 
-// ─── TAREAS EN SEGUNDO PLANO ─────────────────────────────────
+function filterDiagnostics(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll(".diag-card").forEach(c => {
+    c.style.display = c.textContent.toLowerCase().includes(q) ? "block" : "none";
+  });
+}
 
-function asyncFetch(url, resultElId, renderFn) {
-  const el = document.getElementById(resultElId);
-  if (!el) return;
-  el.innerHTML = "<div style='color:var(--text2)'>⏳ Ejecutando en segundo plano...</div>";
+// ─── TAREAS EN SEGUNDO PLANO (GLOBAL / PERSISTENTE) ──────────
+
+window.__tasks = {};       // {taskKey: {task_id, label, status, result, error, renderFn, elId}}
+window.__pollers = {};     // {task_id: interval_id}
+window.__taskCount = 0;
+
+function toggleTaskBar() {
+  document.getElementById("taskbar").classList.toggle("active");
+}
+
+function updateTaskBar() {
+  const now = Date.now();
+  for (const [k, t] of Object.entries(window.__tasks)) {
+    if (t.status !== "running" && t.ts && (now - t.ts) > 300000) delete window.__tasks[k];
+  }
+  const bar = document.getElementById("taskbar");
+  const toggle = document.getElementById("taskbarToggle");
+  const entries = Object.entries(window.__tasks);
+  const running = entries.filter(([,t]) => t.status === "running").length;
+  if (toggle) toggle.textContent = running ? "📋 " + running : "📋";
+  // Update bottom nav badge
+  const navTasks = document.getElementById("navTasks");
+  if (navTasks) {
+    let badge = navTasks.querySelector(".nav-badge");
+    if (running) {
+      if (!badge) { badge = document.createElement("span"); badge.className = "nav-badge"; navTasks.appendChild(badge); }
+      badge.textContent = running;
+    } else if (badge) badge.remove();
+  }
+  if (!entries.length) { bar?.classList.remove("active"); return; }
+  bar.innerHTML = `<div style='display:flex;justify-content:space-between;margin-bottom:6px'>
+    <span style='font-weight:600'>Tareas</span>
+    <span style='font-size:12px;color:var(--accent2);cursor:pointer' onclick='clearDoneTasks()'>Limpiar completadas</span>
+  </div>` + entries.map(([key, t]) => {
+    const icon = t.status === "running" ? "⏳" : t.status === "done" ? "✅" : t.status === "error" ? "❌" : "⏳";
+    const resultHtml = t.status === "done" ? `<div class='task-result'>${escapeHtml(JSON.stringify(t.result, null, 2).slice(0, 200))}</div>` : "";
+    const errorHtml = t.status === "error" ? `<div class='task-result' style='color:var(--danger)'>${escapeHtml(t.error)}</div>` : "";
+    const link = t.elId ? ` <span style='color:var(--accent);cursor:pointer' onclick='document.getElementById("${t.elId}").scrollIntoView({behavior:"smooth"})'>📍</span>` : "";
+    return `<div class='task-item'><span class='task-status'>${icon}</span><div class='task-label'>${escapeHtml(t.label)}${link}${resultHtml}${errorHtml}</div></div>`;
+  }).join("");
+}
+
+function clearDoneTasks() {
+  for (const [k, t] of Object.entries(window.__tasks)) {
+    if (t.status !== "running") delete window.__tasks[k];
+  }
+  updateTaskBar();
+}
+
+function startTask(label, url, resultElId, renderFn) {
+  const taskKey = label + "_" + Date.now();
+  window.__tasks[taskKey] = {label, status: "running", result: null, error: null, renderFn, elId: resultElId, ts: Date.now()};
+  window.__taskCount++;
+  const el = resultElId ? document.getElementById(resultElId) : null;
+  if (el) el.innerHTML = "<div style='color:var(--text2)'>⏳ " + escapeHtml(label) + "...</div>";
+  updateTaskBar();
 
   const sep = url.includes('?') ? '&' : '?';
   fetch(url + sep + "async=true")
     .then(r => r.json())
     .then(data => {
       if (data.task_id) {
+        window.__tasks[taskKey].task_id = data.task_id;
         const poll = setInterval(() => {
           fetch("/api/task/" + data.task_id)
             .then(r => r.json())
             .then(task => {
               if (task.status === "done") {
                 clearInterval(poll);
-                el.innerHTML = renderFn(task.result);
+                delete window.__pollers[data.task_id];
+                window.__tasks[taskKey].status = "done";
+                window.__tasks[taskKey].result = task.result;
+                window.__tasks[taskKey].ts = Date.now();
+                const html = renderFn(task.result);
+                if (el) el.innerHTML = html;
+                updateTaskBar();
               } else if (task.status === "error") {
                 clearInterval(poll);
-                el.innerHTML = "<div class='result-box' style='color:var(--danger)'>Error: " + escapeHtml(task.error) + "</div>";
+                delete window.__pollers[data.task_id];
+                window.__tasks[taskKey].status = "error";
+                window.__tasks[taskKey].error = task.error;
+                window.__tasks[taskKey].ts = Date.now();
+                const html = "<div class='result-box' style='color:var(--danger)'>Error: " + escapeHtml(task.error) + "</div>";
+                if (el) el.innerHTML = html;
+                showToast(label + " ❌", "error");
+                updateTaskBar();
               }
             });
-        }, 1500);
+        }, 2000);
+        window.__pollers[data.task_id] = poll;
       } else {
-        el.innerHTML = renderFn(data);
+        window.__tasks[taskKey].status = "done";
+        window.__tasks[taskKey].result = data;
+        window.__tasks[taskKey].ts = Date.now();
+        const html = renderFn(data);
+        if (el) el.innerHTML = html;
+        updateTaskBar();
       }
     })
     .catch(e => {
-      el.innerHTML = "<div class='result-box' style='color:var(--danger)'>Error: " + escapeHtml(e.message) + "</div>";
+      window.__tasks[taskKey].status = "error";
+      window.__tasks[taskKey].error = e.message;
+      window.__tasks[taskKey].ts = Date.now();
+      const html = "<div class='result-box' style='color:var(--danger)'>Error: " + escapeHtml(e.message) + "</div>";
+      if (el) el.innerHTML = html;
+      showToast(label + " ❌", "error");
+      updateTaskBar();
     });
+  return taskKey;
+}
+
+// Compat: old asyncFetch redirects to new system
+function asyncFetch(url, resultElId, renderFn) {
+  const label = url.replace(/^.*\/api\//, "").replace(/\?.*$/, "").replace(/[-_]/g, " ");
+  return startTask(label, url, resultElId, renderFn);
 }
 
 function asyncFetchUrl(url, resultElId, renderFn) {
-  asyncFetch(url, resultElId, renderFn);
+  return asyncFetch(url, resultElId, renderFn);
+}
+
+// POST version: envía POST con JSON body + ?async=true, actualiza UI y taskbar
+function asyncFetchPost(label, url, body, resultElId, onComplete) {
+  const taskKey = label + "_" + Date.now();
+  window.__tasks[taskKey] = {label, status: "running", result: null, error: null, renderFn: onComplete, elId: resultElId, ts: Date.now()};
+  const el = resultElId ? document.getElementById(resultElId) : null;
+  if (el) el.innerHTML = "<div style='color:var(--text2)'>⏳ " + escapeHtml(label) + "...</div>";
+  updateTaskBar();
+  const sep = url.includes('?') ? '&' : '?';
+  fetch(url + sep + "async=true", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.task_id) {
+        window.__tasks[taskKey].task_id = data.task_id;
+        const poll = setInterval(() => {
+          fetch("/api/task/" + data.task_id)
+            .then(r => r.json())
+            .then(task => {
+              if (task.status === "done") {
+                clearInterval(poll);
+                delete window.__pollers[data.task_id];
+                window.__tasks[taskKey].status = "done";
+                window.__tasks[taskKey].result = task.result;
+                window.__tasks[taskKey].ts = Date.now();
+                onComplete(task.result, el, null);
+                updateTaskBar();
+              } else if (task.status === "error") {
+                clearInterval(poll);
+                delete window.__pollers[data.task_id];
+                window.__tasks[taskKey].status = "error";
+                window.__tasks[taskKey].error = task.error;
+                window.__tasks[taskKey].ts = Date.now();
+                onComplete(null, el, task.error);
+                showToast(label + " ❌", "error");
+                updateTaskBar();
+              }
+            });
+        }, 2000);
+        window.__pollers[data.task_id] = poll;
+      } else {
+        window.__tasks[taskKey].status = "done";
+        window.__tasks[taskKey].result = data;
+        window.__tasks[taskKey].ts = Date.now();
+        onComplete(data, el, null);
+        updateTaskBar();
+      }
+    })
+    .catch(e => {
+      window.__tasks[taskKey].status = "error";
+      window.__tasks[taskKey].error = e.message;
+      window.__tasks[taskKey].ts = Date.now();
+      onComplete(null, el, e.message);
+      showToast(label + " ❌", "error");
+      updateTaskBar();
+    });
 }
 
 // ─── ESCÁNER DE RED ──────────────────────────────────────────
@@ -1159,75 +1517,163 @@ function asyncFetchUrl(url, resultElId, renderFn) {
 function showScanner() {
   document.getElementById("results").innerHTML = `
     <h3 style='margin-bottom:12px'>🔍 Escáner de Red</h3>
+    <div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px'>
+      <div class='input-group' style='margin:0'><label>Host/IP</label><input type='text' id='scan_host' placeholder='192.168.1.1' style='font-size:15px'></div>
+      <div class='input-group' style='margin:0'><label>Subred</label><input type='text' id='scan_subnet' placeholder='192.168.1.0/24' style='font-size:15px'></div>
+    </div>
     <div class='section'>
-      <div class='section-header'>Ping / OS Detection</div>
-      <div class='section-body'>
-        <div class='input-group'><label>Host</label><input type='text' id='scan_host' placeholder='192.168.1.1'></div>
-        <button class='btn' onclick='scannerPing()'>📡 Ping + OS</button>
+      <div class='section-header'>📡 Ping + OS Detection</div>
+      <div class='section-body' style='padding:10px'>
+        <button class='btn' onclick='scannerPing()' style='background:var(--accent2)'>📡 Ping + OS</button>
         <div id='scanPingResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>Quick Scan (puertos comunes)</div>
-      <div class='section-body'>
-        <button class='btn btn-outline' onclick='scannerQuick()'>⚡ Escaneo Rápido</button>
+      <div class='section-header'>⚡ Quick Scan</div>
+      <div class='section-body' style='padding:10px'>
+        <p style='font-size:12px;color:var(--text2);margin-bottom:8px'>Escanea 20 puertos comunes en segundos</p>
+        <button class='btn' onclick='scannerQuick()'>⚡ Escaneo Rápido</button>
         <div id='scanQuickResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>Descubrir Hosts en Subred</div>
-      <div class='section-body'>
-        <div class='input-group'><label>Subred</label><input type='text' id='scan_subnet' placeholder='192.168.1.0/24'></div>
+      <div class='section-header'>🌐 Descubrir Hosts</div>
+      <div class='section-body' style='padding:10px'>
+        <p style='font-size:12px;color:var(--text2);margin-bottom:8px'>Descubre hosts activos en una subred</p>
         <button class='btn btn-outline' onclick='scannerDiscover()'>🌐 Descubrir</button>
         <div id='scanDiscoverResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>Traceroute</div>
-      <div class='section-body'>
-        <button class='btn btn-outline' onclick='scannerTrace()'>🔄 Traceroute</button>
+      <div class='section-header'>🔄 Traceroute</div>
+      <div class='section-body' style='padding:10px'>
+        <button class='btn btn-outline' onclick='scannerTrace()'>🔄 Trazar Ruta</button>
         <div id='scanTraceResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>📷 Escaneo CCTV</div>
-      <div class='section-body'>
-        <button class='btn btn-outline' onclick='scannerCCTV()'>📷 Escanear Puertos CCTV</button>
-        <button class='btn btn-outline' style='margin-top:6px' onclick='scannerIdentify()'>🏷 Identificar Dispositivo</button>
+      <div class='section-header'>📷 Dispositivos CCTV</div>
+      <div class='section-body' style='padding:10px'>
+        <div style='display:flex;gap:6px;flex-wrap:wrap'>
+          <button class='btn btn-outline' onclick='scannerCCTV()' style='flex:1;min-width:120px'>📷 Escanear Puertos</button>
+          <button class='btn btn-outline' onclick='scannerIdentify()' style='flex:1;min-width:120px'>🏷 Identificar</button>
+        </div>
         <div id='scanCCTVResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>🚪 Escaneo Control de Acceso</div>
-      <div class='section-body'>
-        <button class='btn btn-outline' onclick='scannerAC()'>🚪 Escanear Puertos AC</button>
+      <div class='section-header'>🚪 Control de Acceso</div>
+      <div class='section-body' style='padding:10px'>
+        <button class='btn btn-outline' onclick='scannerAC()'>🚪 Escanear Puertos</button>
         <div id='scanACResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>🌐 Descubrir CCTV/AC en Subred</div>
-      <div class='section-body'>
+      <div class='section-header'>🔎 Búsqueda CCTV/AC en Subred</div>
+      <div class='section-body' style='padding:10px'>
         <button class='btn btn-outline' onclick='scannerDiscoverCCTV()'>📡 Buscar CCTV/AC</button>
         <div id='scanDiscoverCCTVResult'></div>
       </div>
     </div>
     <div class='section'>
-      <div class='section-header'>Escaneo Personalizado</div>
-      <div class='section-body'>
-        <div class='input-group'><label>Puertos (separados por coma)</label><input type='text' id='scan_ports_list' placeholder='80,443,3306,3389,8080'></div>
-        <button class='btn btn-outline' onclick='scannerPorts()'>🔎 Escanear</button>
+      <div class='section-header'>⚙️ Escaneo Personalizado</div>
+      <div class='section-body' style='padding:10px'>
+        <div class='input-group' style='margin:0'><label>Puertos (separados por coma)</label><input type='text' id='scan_ports_list' placeholder='80,443,3306,3389,8080' style='font-size:15px'></div>
+        <button class='btn btn-outline' onclick='scannerPorts()' style='margin-top:8px'>🔎 Escanear</button>
         <div id='scanPortsResult'></div>
       </div>
     </div>
   `;
 }
 
-async function scannerPing() {
+function renderScanResult(data, type) {
+  if (!data || data.error) return `<div class='result-box' style='color:var(--danger)'>❌ ${escapeHtml(data?.error || "Error desconocido")}</div>`;
+  if (type === "ping") {
+    const status = data.alive ? "<span class='badge badge-success'>✅ Activo</span>" : "<span class='badge badge-danger'>❌ Inactivo</span>";
+    return `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><strong>${escapeHtml(data.host)}</strong> ${status}</div>
+      <div style='color:var(--text2);font-size:12px'>OS: ${escapeHtml(data.os || "Desconocido")}</div>
+    </div>`;
+  }
+  if (type === "quick") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:8px'><strong>${escapeHtml(data.host)}</strong> — <span class='badge badge-accent'>${data.count} puertos abiertos</span></div>`;
+    (data.ports||[]).forEach(p => {
+      html += `<div class='cmd-item'><span class='badge badge-success'>${p.port}</span> <span style='margin-left:6px'>${p.service}</span></div>`;
+    });
+    if (!data.ports?.length) html += "<div style='color:var(--text2);font-size:13px'>Sin puertos abiertos</div>";
+    html += "</div>";
+    return html;
+  }
+  if (type === "discover") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><span class='badge badge-accent'>${data.count} hosts encontrados</span></div>`;
+    (data.hosts||[]).forEach(h => {
+      html += `<div class='cmd-item'><span class='badge badge-success'>${escapeHtml(h.ip||h)}</span></div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  if (type === "trace") {
+    let html = `<div class='result-box' style='max-height:none'><div style='margin-bottom:6px'><strong>Traceroute a ${escapeHtml(data.host||"")}</strong></div>`;
+    (data.hops||[]).forEach(h => {
+      const hopNum = h.hop || h.index || "";
+      html += `<div class='cmd-item'><span class='badge badge-accent'>${hopNum}</span> <span style='margin-left:6px'>${escapeHtml(h.ip||"*")}</span> <span style='color:var(--text2);font-size:11px'>${h.time||""}</span></div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  if (type === "ports") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><strong>${escapeHtml(data.host)}</strong> — <span class='badge badge-accent'>${data.count} puertos escaneados</span></div>`;
+    (data.ports||[]).forEach(p => {
+      const badge = p.state === "open" ? "badge-success" : "badge-danger";
+      html += `<div class='cmd-item'><span class='badge ${badge}'>${p.port}</span> <span style='margin-left:6px'>${escapeHtml(p.service||"")}</span></div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  if (type === "cctv") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><span class='badge badge-accent'>${data.count} puertos CCTV</span></div>`;
+    (data.ports||[]).forEach(p => {
+      html += `<div class='cmd-item'><span class='badge badge-success'>${p.port}</span> ${escapeHtml(p.service)} <span style='color:var(--accent2);font-size:11px'>[${p.device_type}]</span>`;
+      if (p.banner_preview) html += `<div style='font-size:11px;color:var(--text2);margin-top:2px'>${escapeHtml(p.banner_preview)}</div>`;
+      html += `</div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  if (type === "ac") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><span class='badge badge-accent'>${data.count} puertos AC</span></div>`;
+    (data.ports||[]).forEach(p => {
+      html += `<div class='cmd-item'><span class='badge badge-success'>${p.port}</span> ${escapeHtml(p.service)} <span style='color:var(--accent2);font-size:11px'>[${p.device_type}]</span>`;
+      if (p.banner_preview) html += `<div style='font-size:11px;color:var(--text2);margin-top:2px'>${escapeHtml(p.banner_preview)}</div>`;
+      html += `</div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  if (type === "discover-cctv") {
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='margin-bottom:6px'><span class='badge badge-accent'>${data.count} dispositivos CCTV/AC</span></div>`;
+    (data.devices||[]).forEach(d => {
+      html += `<div class='cmd-item'><span class='badge badge-success'>${escapeHtml(d.ip)}</span> <span style='color:var(--accent2);font-size:11px'>${(d.device_type||[]).join(", ")}</span>
+        <div style='font-size:11px;color:var(--text2)'>Puertos: ${(d.open_ports||[]).join(", ")}</div></div>`;
+    });
+    html += "</div>";
+    return html;
+  }
+  return `<div class='result-box'>${escapeHtml(JSON.stringify(data, null, 2))}</div>`;
+}
+
+function scannerPing() {
   const host = document.getElementById("scan_host").value;
   if (!host) return;
-  const r = await (await fetch("/api/scanner/ping?host="+host)).json();
-  document.getElementById("scanPingResult").innerHTML =
-    `<div class='result-box'>${JSON.stringify(r, null, 2)}</div>`;
+  asyncFetch("/api/scanner/ping?host="+encodeURIComponent(host), "scanPingResult",
+    r => renderScanResult(r, "ping")
+  );
 }
 
 function scannerQuick() {
@@ -1235,7 +1681,7 @@ function scannerQuick() {
   if (!host) return;
   asyncFetch("/api/scanner/quick-scan?host="+encodeURIComponent(host),
     "scanQuickResult",
-    r => `<div class='result-box'>${escapeHtml(JSON.stringify(r, null, 2))}</div>`
+    r => renderScanResult(r, "quick")
   );
 }
 
@@ -1244,7 +1690,7 @@ function scannerDiscover() {
   if (!sub) return;
   asyncFetch("/api/scanner/discover?subnet="+encodeURIComponent(sub),
     "scanDiscoverResult",
-    r => `<div class='result-box'>${escapeHtml(JSON.stringify(r, null, 2))}</div>`
+    r => renderScanResult(r, "discover")
   );
 }
 
@@ -1253,7 +1699,7 @@ function scannerTrace() {
   if (!host) return;
   asyncFetch("/api/scanner/traceroute?host="+encodeURIComponent(host),
     "scanTraceResult",
-    r => `<div class='result-box'>${escapeHtml(JSON.stringify(r, null, 2))}</div>`
+    r => renderScanResult(r, "trace")
   );
 }
 
@@ -1263,7 +1709,7 @@ function scannerPorts() {
   if (!host) return;
   asyncFetch("/api/scanner/scan-ports?host="+encodeURIComponent(host)+"&ports="+encodeURIComponent(ports),
     "scanPortsResult",
-    r => `<div class='result-box'>${escapeHtml(JSON.stringify(r, null, 2))}</div>`
+    r => renderScanResult(r, "ports")
   );
 }
 
@@ -1272,14 +1718,7 @@ function scannerCCTV() {
   if (!host) return;
   asyncFetch("/api/scanner/scan-cctv?host="+encodeURIComponent(host),
     "scanCCTVResult",
-    r => {
-      let html = `📷 <strong>Dispositivo CCTV</strong> - ${r.count} puertos encontrados\n`;
-      (r.ports||[]).forEach(p => {
-        html += `\nPuerto ${p.port}: ${p.service} [${p.device_type}]`;
-        if (p.banner_preview) html += `\n  Banner: ${p.banner_preview}`;
-      });
-      return `<div class='result-box'>${escapeHtml(html)}</div>`;
-    }
+    r => renderScanResult(r, "cctv")
   );
 }
 
@@ -1289,12 +1728,18 @@ function scannerIdentify() {
   asyncFetch("/api/scanner/scan-cctv?host="+encodeURIComponent(host),
     "scanCCTVResult",
     r => {
-      let html = `🏷 Identificación de ${host}:\n`;
-      Object.entries(r.device_identity || {}).forEach(([port, vendor]) => {
-        html += `\n Puerto ${port}: ${vendor}`;
-      });
-      if (!Object.keys(r.device_identity||{}).length) html += "\n No se pudo identificar";
-      return `<div class='result-box'>${escapeHtml(html)}</div>`;
+      let html = `<div class='result-box'><strong>🏷 Identificación de ${escapeHtml(host)}</strong>`;
+      const ids = r.device_identity || {};
+      const entries = Object.entries(ids);
+      if (entries.length) {
+        entries.forEach(([port, vendor]) => {
+          html += `<div class='cmd-item'>Puerto ${port}: ${escapeHtml(vendor)}</div>`;
+        });
+      } else {
+        html += "<div style='color:var(--text2);margin-top:6px'>No se pudo identificar el dispositivo</div>";
+      }
+      html += "</div>";
+      return html;
     }
   );
 }
@@ -1304,14 +1749,7 @@ function scannerAC() {
   if (!host) return;
   asyncFetch("/api/scanner/scan-ac?host="+encodeURIComponent(host),
     "scanACResult",
-    r => {
-      let html = `🚪 <strong>Control de Acceso</strong> - ${r.count} puertos encontrados\n`;
-      (r.ports||[]).forEach(p => {
-        html += `\nPuerto ${p.port}: ${p.service} [${p.device_type}]`;
-        if (p.banner_preview) html += `\n  Banner: ${p.banner_preview}`;
-      });
-      return `<div class='result-box'>${escapeHtml(html)}</div>`;
-    }
+    r => renderScanResult(r, "ac")
   );
 }
 
@@ -1320,13 +1758,7 @@ function scannerDiscoverCCTV() {
   if (!sub) return;
   asyncFetch("/api/scanner/discover-cctv?subnet="+encodeURIComponent(sub),
     "scanDiscoverCCTVResult",
-    r => {
-      let html = `🌐 Dispositivos CCTV/AC en ${sub}: ${r.count} encontrados\n`;
-      (r.devices||[]).forEach(d => {
-        html += `\n📍 ${d.ip} (${(d.device_type||[]).join(", ")})\n  Puertos: ${(d.open_ports||[]).join(", ")}`;
-      });
-      return `<div class='result-box'>${escapeHtml(html)}</div>`;
-    }
+    r => renderScanResult(r, "discover-cctv")
   );
 }
 
@@ -1579,50 +2011,57 @@ function showSNMP() {
   `;
 }
 
-async function snmpCheck(btn) {
+function snmpCheck(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   if(btn)btn.classList.add("active");
   const h=document.getElementById("snmp_host").value, c=document.getElementById("snmp_comm").value;
   if(!h)return;
-  const r=await(await fetch("/api/snmp/check?host="+h+"&community="+c)).json();
-  document.getElementById("snmpResult").innerHTML=`<div class='result-box'>${JSON.stringify(r,null,2)}</div>`;
+  asyncFetch("/api/snmp/check?host="+h+"&community="+c, "snmpResult",
+    r => `<div class='result-box'>${JSON.stringify(r,null,2)}</div>`
+  );
 }
 
-async function snmpSystem(btn) {
+function snmpSystem(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   if(btn)btn.classList.add("active");
   const h=document.getElementById("snmp_host").value, c=document.getElementById("snmp_comm").value;
   if(!h)return;
-  const r=await(await fetch("/api/snmp/system?host="+h+"&community="+c)).json();
-  document.getElementById("snmpResult").innerHTML=`<div class='result-box'>${JSON.stringify(r,null,2)}</div>`;
+  asyncFetch("/api/snmp/system?host="+h+"&community="+c, "snmpResult",
+    r => `<div class='result-box'>${JSON.stringify(r,null,2)}</div>`
+  );
 }
 
-async function snmpInterfaces(btn) {
+function snmpInterfaces(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   if(btn)btn.classList.add("active");
   const h=document.getElementById("snmp_host").value, c=document.getElementById("snmp_comm").value;
   if(!h)return;
-  const r=await(await fetch("/api/snmp/interfaces?host="+h+"&community="+c)).json();
-  document.getElementById("snmpResult").innerHTML=`<div class='result-box'>${JSON.stringify(r,null,2)}</div>`;
+  asyncFetch("/api/snmp/interfaces?host="+h+"&community="+c, "snmpResult",
+    r => `<div class='result-box'>${JSON.stringify(r,null,2)}</div>`
+  );
 }
 
-async function snmpDetectDevice(btn) {
+function snmpDetectDevice(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   if(btn)btn.classList.add("active");
   const h=document.getElementById("snmp_host").value, c=document.getElementById("snmp_comm").value;
   if(!h)return;
-  const r=await(await fetch("/api/snmp/detect-device?host="+h+"&community="+c)).json();
-  document.getElementById("snmpResult").innerHTML=`<div class='result-box'>${JSON.stringify(r,null,2)}</div>`;
+  asyncFetch("/api/snmp/detect-device?host="+h+"&community="+c, "snmpResult",
+    r => `<div class='result-box'>${JSON.stringify(r,null,2)}</div>`
+  );
 }
 
-async function snmpWalk(btn) {
+function snmpWalk(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   if(btn)btn.classList.add("active");
   const h=document.getElementById("snmp_host").value, c=document.getElementById("snmp_comm").value;
   if(!h)return;
-  const r=await(await fetch("/api/snmp/walk?host="+h+"&community="+c)).json();
-  const txt=Object.entries(r).slice(0,30).map(([k,v])=>k+" = "+v).join("\n")+"\\n...(truncado)";
-  document.getElementById("snmpResult").innerHTML=`<div class='result-box'>${txt}</div>`;
+  asyncFetch("/api/snmp/walk?host="+h+"&community="+c, "snmpResult",
+    r => {
+      const txt=Object.entries(r).slice(0,30).map(([k,v])=>k+" = "+v).join("\n")+"\n...(truncado)";
+      return `<div class='result-box'>${txt}</div>`;
+    }
+  );
 }
 
 // ─── IPAM ────────────────────────────────────────────────────
@@ -1777,27 +2216,19 @@ function showACForm(vendor, btn) {
   window._acSession = null;
 }
 
-async function connectAC(vendor) {
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = "Conectando...";
-  try {
-    const resp = await fetch("/api/access-control/connect", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        vendor,
-        host: document.getElementById("ac_host").value,
-        port: document.getElementById("ac_port").value || 80,
-        user: document.getElementById("ac_user").value || "admin",
-        password: document.getElementById("ac_pass").value,
-      })
-    });
-    const data = await resp.json();
-    const div = document.getElementById("acResult");
+function connectAC(vendor) {
+  const body = {
+    vendor,
+    host: document.getElementById("ac_host").value,
+    port: document.getElementById("ac_port").value || 80,
+    user: document.getElementById("ac_user").value || "admin",
+    password: document.getElementById("ac_pass").value,
+  };
+  asyncFetchPost("Conectar AC " + vendor, "/api/access-control/connect", body, "acResult", (data, el, error) => {
+    if (error) { el.innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${escapeHtml(error)}</div>`; return; }
     if (data.online) {
       window._acSession = data.session;
-      div.innerHTML = `
+      el.innerHTML = `
         <div class='section'>
           <div class='section-header' style='color:var(--success)'>✅ ${data.vendor_name} - Conectado</div>
           <div class='section-body'>
@@ -1815,33 +2246,27 @@ async function connectAC(vendor) {
         </div>
       `;
     } else {
-      div.innerHTML = `<div class='result-box' style='color:var(--danger)'>❌ ${data.error || "No se pudo conectar"}</div>`;
+      el.innerHTML = `<div class='result-box' style='color:var(--danger)'>❌ ${data.error || "No se pudo conectar"}</div>`;
     }
-  } catch(e) {
-    document.getElementById("acResult").innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${e.message}</div>`;
-  }
-  btn.disabled = false;
-  btn.textContent = "🔌 Conectar";
+  });
 }
 
-async function execAC(method, extraParams = {}) {
+function execAC(method, extraParams = {}) {
   const params = {};
   if (method === "hold_door") {
     params.door_id = extraParams.door_id || 1;
     params.seconds = extraParams.seconds || 5;
   }
-  const resp = await fetch("/api/access-control/command", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({session: window._acSession, method, params})
-  });
-  const data = await resp.json();
-  const div = document.getElementById("acCmdResult");
-  if (data.result) {
-    div.innerHTML = `<div class='result-box'>${JSON.stringify(data.result, null, 2)}</div>`;
-  } else {
-    div.innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${data.error}</div>`;
-  }
+  asyncFetchPost("Ejecutar " + method, "/api/access-control/command", {session: window._acSession, method, params}, "acCmdResult",
+    (data, el) => {
+      if (!el) return;
+      if (data.result) {
+        el.innerHTML = `<div class='result-box'>${JSON.stringify(data.result, null, 2)}</div>`;
+      } else {
+        el.innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${data.error}</div>`;
+      }
+    }
+  );
 }
 
 function promptHoldDoor() {
@@ -1945,16 +2370,6 @@ function upsNUT() {
   );
 }
 
-function upsDetect() {
-  const host = document.getElementById("ups_detect_host").value || document.getElementById("ups_snmp_host").value;
-  const comm = document.getElementById("ups_detect_comm").value || document.getElementById("ups_snmp_comm").value;
-  if (!host) return;
-  asyncFetch(`/api/ups/detect?host=${encodeURIComponent(host)}&community=${encodeURIComponent(comm)}`,
-    "upsResult",
-    r => `<div class='result-box'>${escapeHtml(JSON.stringify(r, null, 2))}</div>`
-  );
-}
-
 function upsModbus() {
   const host = document.getElementById("ups_modbus_host").value;
   const port = document.getElementById("ups_modbus_port").value || 502;
@@ -1988,17 +2403,21 @@ function upsAPCUPSD() {
   );
 }
 
-async function upsBatteryLife() {
+function upsBatteryLife() {
   const date = document.getElementById("ups_bat_date").value;
   const type = document.getElementById("ups_bat_type").value;
   if (!date) return;
-  const r = await (await fetch(`/api/ups/battery-life?date=${date}&type=${type}`)).json();
-  let html = "<div class='section'><div class='section-header' style='color:var(--success)'>🔋 Estimación de Vida</div><div class='section-body'>";
-  for (const [k,v] of Object.entries(r)) {
-    html += `<div class='cmd-item'><span style='color:var(--accent2)'>${k}:</span> ${v}</div>`;
-  }
-  html += "</div></div>";
-  document.getElementById("upsResult").innerHTML = html;
+  asyncFetch(`/api/ups/battery-life?date=${date}&type=${type}`,
+    "upsResult",
+    r => {
+      let html = "<div class='section'><div class='section-header' style='color:var(--success)'>🔋 Estimación de Vida</div><div class='section-body'>";
+      for (const [k,v] of Object.entries(r)) {
+        html += `<div class='cmd-item'><span style='color:var(--accent2)'>${k}:</span> ${v}</div>`;
+      }
+      html += "</div></div>";
+      return html;
+    }
+  );
 }
 
 function upsAPC() {
@@ -2015,13 +2434,15 @@ function upsPwrstat() {
   );
 }
 
-async function upsDiagnostics() {
-  const r = await (await fetch(`/api/ups/diagnostics`)).json();
-  showModal(`
-    <button class='modal-close' onclick='closeModal()'>&times;</button>
-    <h2>🔋 Diagnóstico de UPS</h2>
-    <div class='result-box' style='max-height:70vh;font-size:12px'>${escapeHtml(r.procedure)}</div>
-  `);
+function upsDiagnostics() {
+  asyncFetch("/api/ups/diagnostics",
+    null,
+    r => showModal(`
+      <button class='modal-close' onclick='closeModal()'>&times;</button>
+      <h2>🔋 Diagnóstico de UPS</h2>
+      <div class='result-box' style='max-height:70vh;font-size:12px'>${escapeHtml(r.procedure)}</div>
+    `)
+  );
 }
 </script>
 </body>

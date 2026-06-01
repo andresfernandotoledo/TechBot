@@ -270,7 +270,7 @@ def api_diagnostics():
     return jsonify(list(DIAGNOSTIC_PROCEDURES.keys()))
 
 
-@app.route("/api/diagnostics/<name>")
+@app.route("/api/diagnostics/<path:name>")
 def api_diagnostic_detail(name):
     if name == "cctv":
         return jsonify({
@@ -395,9 +395,7 @@ def api_cctv():
     })
 
 
-@app.route("/api/cctv/connect", methods=["POST"])
-def api_cctv_connect():
-    data = request.json
+def _do_cctv_connect(data):
     vendor = data.get("vendor", "").lower()
     host = data.get("host", "")
     port = int(data.get("port", 80))
@@ -406,46 +404,58 @@ def api_cctv_connect():
     ssl = data.get("ssl", False)
     session_id = f"{vendor}_{host}_{port}"
 
-    try:
-        if vendor == "hikvision":
-            client = HikvisionClient(host, port, user, password, ssl)
-        elif vendor == "dahua":
-            client = DahuaClient(host, port, user, password, ssl)
-        elif vendor == "zkteco":
-            client = ZKTecoClient(host, port, user, password, ssl)
-        else:
-            return jsonify({"error": "Vendor no soportado"}), 400
+    if vendor == "hikvision":
+        client = HikvisionClient(host, port, user, password, ssl)
+    elif vendor == "dahua":
+        client = DahuaClient(host, port, user, password, ssl)
+    elif vendor == "zkteco":
+        client = ZKTecoClient(host, port, user, password, ssl)
+    else:
+        return {"online": False, "error": "Vendor no soportado"}
 
-        if client.is_online():
-            API_CLIENTS[session_id] = client
-            info = client.get_device_info()
-            methods = [m for m in dir(client) if not m.startswith("_") and callable(getattr(client, m))]
-            return jsonify({"online": True, "session": session_id, "info": info, "methods": methods})
-        else:
-            return jsonify({"online": False, "error": "No se pudo conectar"})
+    if client.is_online():
+        API_CLIENTS[session_id] = client
+        info = client.get_device_info()
+        methods = [m for m in dir(client) if not m.startswith("_") and callable(getattr(client, m))]
+        return {"online": True, "session": session_id, "info": info, "methods": methods}
+    return {"online": False, "error": "No se pudo conectar"}
+
+
+@app.route("/api/cctv/connect", methods=["POST"])
+def api_cctv_connect():
+    data = request.json or {}
+    if request.args.get("async", "").lower() == "true" or data.get("async"):
+        task_id = start_task(_do_cctv_connect, data)
+        return jsonify({"task_id": task_id, "status": "running"})
+    try:
+        return jsonify(_do_cctv_connect(data))
     except Exception as e:
         return jsonify({"online": False, "error": str(e)})
 
 
-@app.route("/api/cctv/command", methods=["POST"])
-def api_cctv_command():
-    data = request.json
+def _do_cctv_command(data):
     session_id = data.get("session", "")
     method_name = data.get("method", "")
-
     if session_id not in API_CLIENTS:
-        return jsonify({"error": "Sesión no encontrada. Conectá primero."}), 400
-
+        return {"error": "Sesión no encontrada. Conectá primero."}
     client = API_CLIENTS[session_id]
     method = getattr(client, method_name, None)
     if not method or not callable(method):
-        return jsonify({"error": f"Método '{method_name}' no disponible"}), 400
+        return {"error": f"Método '{method_name}' no disponible"}
+    result = method()
+    if isinstance(result, bytes):
+        return {"type": "binary", "size": len(result)}
+    return {"result": result}
 
+
+@app.route("/api/cctv/command", methods=["POST"])
+def api_cctv_command():
+    data = request.json or {}
+    if request.args.get("async", "").lower() == "true" or data.get("async"):
+        task_id = start_task(_do_cctv_command, data)
+        return jsonify({"task_id": task_id, "status": "running"})
     try:
-        result = method()
-        if isinstance(result, bytes):
-            return jsonify({"type": "binary", "size": len(result)})
-        return jsonify({"result": result})
+        return jsonify(_do_cctv_command(data))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -471,72 +481,83 @@ def api_access_control():
     })
 
 
-@app.route("/api/access-control/connect", methods=["POST"])
-def api_ac_connect():
-    data = request.json or {}
+def _do_ac_connect(data):
     vendor = data.get("vendor", "").lower()
     host = data.get("host", "").strip()
     try:
         port = int(data.get("port", 80))
     except (ValueError, TypeError):
-        return jsonify({"online": False, "error": "Puerto inválido"}), 400
+        return {"online": False, "error": "Puerto inválido"}
     user = data.get("user", "admin")
     password = data.get("password", "")
     ssl = data.get("ssl", False)
     session_id = f"ac_{vendor}_{host}_{port}"
 
     if not host:
-        return jsonify({"online": False, "error": "Host/IP requerido"}), 400
+        return {"online": False, "error": "Host/IP requerido"}
     if not vendor:
-        return jsonify({"online": False, "error": "Vendor requerido"}), 400
+        return {"online": False, "error": "Vendor requerido"}
 
+    ac = create_ac_client(vendor, host, port, user, password, ssl)
+    test = ac.test_connection()
+    if isinstance(test, dict) and "error" in test:
+        return {"online": False, "error": test["error"], "detail": test}
+    AC_CLIENTS[session_id] = ac
+    info = ac.get_info()
+    methods = [m for m in dir(ac) if not m.startswith("_") and callable(getattr(ac, m))]
+    return {
+        "online": True,
+        "session": session_id,
+        "info": info,
+        "methods": [m for m in methods if m not in ("get_info", "lock", "unlock", "test_connection")],
+        "vendor_name": ACCESS_CONTROL_INFO.get(vendor, {}).get("name", vendor),
+    }
+
+
+@app.route("/api/access-control/connect", methods=["POST"])
+def api_ac_connect():
+    data = request.json or {}
+    if request.args.get("async", "").lower() == "true" or data.get("async"):
+        task_id = start_task(_do_ac_connect, data)
+        return jsonify({"task_id": task_id, "status": "running"})
     try:
-        ac = create_ac_client(vendor, host, port, user, password, ssl)
-        test = ac.test_connection()
-        if isinstance(test, dict) and "error" in test:
-            return jsonify({"online": False, "error": test["error"], "detail": test}), 400
-        AC_CLIENTS[session_id] = ac
-        info = ac.get_info()
-        methods = [m for m in dir(ac) if not m.startswith("_") and callable(getattr(ac, m))]
-        return jsonify({
-            "online": True,
-            "session": session_id,
-            "info": info,
-            "methods": [m for m in methods if m not in ("get_info", "lock", "unlock", "test_connection")],
-            "vendor_name": ACCESS_CONTROL_INFO.get(vendor, {}).get("name", vendor),
-        })
+        return jsonify(_do_ac_connect(data))
     except ValueError as e:
         return jsonify({"online": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"online": False, "error": f"Error al conectar: {e}"}), 500
 
 
-@app.route("/api/access-control/command", methods=["POST"])
-def api_ac_command():
-    data = request.json or {}
+def _do_ac_command(data):
     session_id = data.get("session", "")
     method_name = data.get("method", "")
     params = data.get("params", {})
-
     if not session_id:
-        return jsonify({"error": "ID de sesión requerido"}), 400
+        return {"error": "ID de sesión requerido"}
     if not method_name:
-        return jsonify({"error": "Nombre del método requerido"}), 400
+        return {"error": "Nombre del método requerido"}
     if session_id not in AC_CLIENTS:
-        return jsonify({"error": "Sesión no encontrada. Conectá primero."}), 400
-
+        return {"error": "Sesión no encontrada. Conectá primero."}
     ac = AC_CLIENTS[session_id]
     method = getattr(ac, method_name, None)
     if not method or not callable(method):
-        return jsonify({"error": f"Método '{method_name}' no disponible"}), 400
+        return {"error": f"Método '{method_name}' no disponible"}
+    result = method(**params)
+    return {"result": result}
 
+
+@app.route("/api/access-control/command", methods=["POST"])
+def api_ac_command():
+    data = request.json or {}
+    if request.args.get("async", "").lower() == "true" or data.get("async"):
+        task_id = start_task(_do_ac_command, data)
+        return jsonify({"task_id": task_id, "status": "running"})
     try:
-        result = method(**params)
-        return jsonify({"result": result})
+        return jsonify(_do_ac_command(data))
     except ValueError as e:
         return jsonify({"error": f"Parámetro inválido: {e}"}), 400
     except Exception as e:
-        return jsonify({"error": f"Error ejecutando {method_name}: {e}"}), 500
+        return jsonify({"error": f"Error ejecutando: {e}"}), 500
 
 
 # ─── ESCÁNER DE RED ───────────────────────────────────────────
@@ -626,11 +647,15 @@ def api_scanner_ping():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        alive = ping_host(host)
-        os_info = os_detection(host)
-        return jsonify({"host": host, "alive": alive, "os": os_info})
+        return _async_or_run(_scanner_ping, host)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _scanner_ping(host):
+    alive = ping_host(host)
+    os_info = os_detection(host)
+    return {"host": host, "alive": alive, "os": os_info}
 
 
 @app.route("/api/scanner/traceroute")
@@ -742,10 +767,13 @@ def api_snmp_walk():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        result = snmp_walk(host, community, oid)
-        return jsonify(result)
+        return _async_or_run(_snmp_walk, host, community, oid)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_walk(host, community, oid):
+    return snmp_walk(host, community, oid)
 
 
 @app.route("/api/snmp/system")
@@ -755,12 +783,16 @@ def api_snmp_system():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        info = get_system_info(host, community)
-        vendor = detect_vendor(host, community)
-        info["vendor"] = vendor
-        return jsonify(info)
+        return _async_or_run(_snmp_system, host, community)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_system(host, community):
+    info = get_system_info(host, community)
+    vendor = detect_vendor(host, community)
+    info["vendor"] = vendor
+    return info
 
 
 @app.route("/api/snmp/interfaces")
@@ -770,10 +802,14 @@ def api_snmp_interfaces():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        ifaces = get_interfaces(host, community)
-        return jsonify({"host": host, "interfaces": ifaces, "count": len(ifaces)})
+        return _async_or_run(_snmp_interfaces, host, community)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_interfaces(host, community):
+    ifaces = get_interfaces(host, community)
+    return {"host": host, "interfaces": ifaces, "count": len(ifaces)}
 
 
 @app.route("/api/snmp/check")
@@ -783,10 +819,14 @@ def api_snmp_check():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        accessible = snmp_check(host, community)
-        return jsonify({"host": host, "community": community, "accessible": accessible})
+        return _async_or_run(_snmp_check, host, community)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_check(host, community):
+    accessible = snmp_check(host, community)
+    return {"host": host, "community": community, "accessible": accessible}
 
 
 @app.route("/api/snmp/detect-device")
@@ -796,17 +836,16 @@ def api_snmp_detect_device():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        device_type = detect_device_type(host, community)
-        info = get_system_info(host, community)
-        vendor = detect_vendor(host, community)
-        return jsonify({
-            "host": host,
-            "device_type": device_type,
-            "vendor": vendor,
-            "system_info": info,
-        })
+        return _async_or_run(_snmp_detect_device, host, community)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_detect_device(host, community):
+    device_type = detect_device_type(host, community)
+    info = get_system_info(host, community)
+    vendor = detect_vendor(host, community)
+    return {"host": host, "device_type": device_type, "vendor": vendor, "system_info": info}
 
 
 @app.route("/api/snmp/cctv-info")
@@ -816,15 +855,15 @@ def api_snmp_cctv_info():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        info = get_cctv_info(host, community)
-        device_type = detect_device_type(host, community)
-        return jsonify({
-            "host": host,
-            "device_type": device_type,
-            "info": info,
-        })
+        return _async_or_run(_snmp_cctv_info, host, community)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _snmp_cctv_info(host, community):
+    info = get_cctv_info(host, community)
+    device_type = detect_device_type(host, community)
+    return {"host": host, "device_type": device_type, "info": info}
 
 
 # ─── IPAM ─────────────────────────────────────────────────────
@@ -1056,7 +1095,10 @@ def api_mac_lookup():
 
 def _async_or_run(func, *args, **kwargs):
     """Ejecuta una función en segundo plano si ?async=true, o directo si no."""
-    if request.args.get("async", "").lower() == "true":
+    is_async = request.args.get("async", "").lower() == "true"
+    if request.is_json and not is_async:
+        is_async = request.json.get("async", False) is True
+    if is_async:
         task_id = start_task(func, *args, **kwargs)
         return jsonify({"task_id": task_id, "status": "running"})
     result = func(*args, **kwargs)
@@ -1263,4 +1305,4 @@ def api_ups_battery_life():
 
 if __name__ == "__main__":
     print("🌐 TechBot Web App corriendo en http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
