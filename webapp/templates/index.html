@@ -210,6 +210,109 @@
   }
   .input-group input:focus { border-color: var(--accent); }
 
+  /* ─── CCTV CALC FORM ─── */
+  .cctv-group-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cctv-group-row {
+    background: linear-gradient(180deg, rgba(35,39,56,0.95), rgba(26,29,42,0.95));
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .cctv-group-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .cctv-group-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cctv-group-title::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(34,211,238,0.45);
+  }
+  .cctv-mini-grid {
+    display: grid;
+    grid-template-columns: 78px minmax(170px, 1.4fr) minmax(130px, 1fr) 78px;
+    gap: 10px;
+    align-items: end;
+  }
+  .cctv-mini-field.wide {
+    grid-column: span 2;
+  }
+  .cctv-mini-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text2);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .cctv-mini-field input,
+  .cctv-mini-field select {
+    width: 100% !important;
+    min-height: 42px;
+    background-color: var(--surface) !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    border-radius: var(--radius-sm);
+    color: var(--text) !important;
+    font-size: 13px;
+    outline: none;
+    padding: 10px 12px;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .cctv-mini-field select {
+    background-image: linear-gradient(45deg, transparent 50%, var(--text2) 50%), linear-gradient(135deg, var(--text2) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 18px, calc(100% - 11px) 18px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+  .cctv-mini-field input:focus,
+  .cctv-mini-field select:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(34,211,238,0.10);
+  }
+  .cctv-add-btn {
+    width: auto !important;
+    min-width: 132px;
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .cctv-remove-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    flex: 0 0 32px;
+    color: var(--danger);
+  }
+  @media(max-width: 720px) {
+    .cctv-mini-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cctv-mini-field.wide {
+      grid-column: span 2;
+    }
+  }
+
   /* ─── BUTTONS ─── */
   .btn {
     background: var(--accent);
@@ -925,6 +1028,7 @@ function renderCommands(q) {
     }
     if (catHtml) {
       html += `<div class='section'><div class='section-header'>${cat}</div><div class='section-body'>${catHtml}</div></div>`;
+    }
   }
   div.innerHTML = html || "<p style='color:var(--text2)'>Sin resultados</p>";
 }
@@ -1010,44 +1114,66 @@ async function renderCCTCCalculator(data) {
   const sceneOptions = opts.scenes.map(s =>
     `<option value="${s}">${s}</option>`
   ).join("");
+  const poeOptions = Object.entries(opts.poe_profiles || {Genérico: 7.5}).map(([name, watts]) =>
+    `<option value="${name}" data-watts="${watts}">${name} (${watts}W)</option>`
+  ).join("");
+  const nvrOptions = Object.entries(opts.nvr_channels || {}).map(([label, channels]) =>
+    `<option value="${channels}">${label} (${channels} canales)</option>`
+  ).join("");
 
-  let groupRow = (idx) => `
-    <tr id="cg_${idx}">
-      <td><input type='number' id='cg_${idx}_qty' value='4' min='1' max='999' style='width:50px'></td>
-      <td><select id='cg_${idx}_res' style='max-width:180px'>${resOptions}</select></td>
-      <td><select id='cg_${idx}_codec' style='max-width:130px'>${codecOptions}</select></td>
-      <td><input type='number' id='cg_${idx}_fps' value='15' min='1' max='60' style='width:50px'></td>
-      <td><select id='cg_${idx}_smart' style='max-width:150px'>${smartOptions}</select></td>
-      <td><select id='cg_${idx}_scene' style='max-width:100px'>${sceneOptions}</select></td>
-      <td style='text-align:center'><span id='cg_${idx}_bw'>—</span></td>
-      <td><button class='btn btn-outline' style='padding:2px 8px;font-size:12px' onclick='removeCCTVGroup(${idx})'>✕</button></td>
-    </tr>`;
+  let groupRow = (idx, qty = 4) => `
+    <div class='cctv-group-row' id='cg_${idx}'>
+      <div class='cctv-group-head'>
+        <div class='cctv-group-title'>Grupo ${idx + 1}</div>
+        <button class='btn btn-outline cctv-remove-btn' onclick='removeCCTVGroup(${idx})'>✕</button>
+      </div>
+      <div class='cctv-mini-grid'>
+        <div class='cctv-mini-field'>
+          <label>Cant.</label>
+          <input type='number' id='cg_${idx}_qty' value='${qty}' min='1' max='999'>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>Resolución</label>
+          <select id='cg_${idx}_res'>${resOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>Codec</label>
+          <select id='cg_${idx}_codec'>${codecOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>FPS</label>
+          <input type='number' id='cg_${idx}_fps' value='15' min='1' max='60'>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>Smart Codec</label>
+          <select id='cg_${idx}_smart'>${smartOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>Escena</label>
+          <select id='cg_${idx}_scene'>${sceneOptions}</select>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>PoE</label>
+          <select id='cg_${idx}_poe' onchange='syncCCTVPoeWatts(${idx})'>${poeOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>W</label>
+          <input type='number' id='cg_${idx}_poe_w' value='7.5' min='0' step='0.1'>
+        </div>
+      </div>
+    </div>`;
 
   let rowHtml = groupRow(0);
 
   document.getElementById("calcList").innerHTML = `
     <div class='section'>
       <div class='section-header'>📷 Grupos de Cámaras
-        <button class='btn btn-outline' style='margin-left:12px;padding:2px 10px;font-size:12px' onclick='addCCTVGroup()'>+ Agregar grupo</button>
+        <button class='btn btn-outline cctv-add-btn' onclick='addCCTVGroup()'>+ Agregar grupo</button>
       </div>
-      <div class='section-body' style='overflow-x:auto'>
-        <table style='width:100%;border-collapse:collapse;font-size:12px'>
-          <thead>
-            <tr style='background:var(--bg2)'>
-              <th style='padding:6px'>Cant.</th>
-              <th style='padding:6px'>Resolución</th>
-              <th style='padding:6px'>Codec</th>
-              <th style='padding:6px'>FPS</th>
-              <th style='padding:6px'>Smart Codec</th>
-              <th style='padding:6px'>Escena</th>
-              <th style='padding:6px'>Bitrate</th>
-              <th style='padding:6px;width:30px'></th>
-            </tr>
-          </thead>
-          <tbody id='cctvGroupBody'>
-            ${rowHtml}
-          </tbody>
-        </table>
+      <div class='section-body'>
+        <div class='cctv-group-list' id='cctvGroupBody'>
+          ${rowHtml}
+        </div>
       </div>
     </div>
     <div class='section'>
@@ -1058,6 +1184,7 @@ async function renderCCTCCalculator(data) {
           <div class='input-group' style='flex:1;min-width:120px'><label>Movimiento (%)</label><input type='number' id='cc_motion' value='100' min='1' max='100'></div>
           <div class='input-group' style='flex:1;min-width:120px'><label>Retención (días)</label><input type='number' id='cc_days' value='30' min='1' max='9999'></div>
           <div class='input-group' style='flex:1;min-width:120px'><label>Disco disponible (GB)</label><input type='number' id='cc_storage' value='2000' min='1'></div>
+          <div class='input-group' style='flex:1;min-width:120px'><label>Canales NVR</label><select id='cc_nvr'><option value=''>Sin límite</option>${nvrOptions}</select></div>
         </div>
       </div>
     </div>
@@ -1079,17 +1206,48 @@ function addCCTVGroup() {
   const codecOptions = document.querySelector('#cg_0_codec')?.innerHTML || "";
   const smartOptions = document.querySelector('#cg_0_smart')?.innerHTML || "";
   const sceneOptions = document.querySelector('#cg_0_scene')?.innerHTML || "";
+  const poeOptions = document.querySelector('#cg_0_poe')?.innerHTML || "";
   const row = `
-    <tr id="cg_${idx}">
-      <td><input type='number' id='cg_${idx}_qty' value='1' min='1' max='999' style='width:50px'></td>
-      <td><select id='cg_${idx}_res' style='max-width:180px'>${resOptions}</select></td>
-      <td><select id='cg_${idx}_codec' style='max-width:130px'>${codecOptions}</select></td>
-      <td><input type='number' id='cg_${idx}_fps' value='15' min='1' max='60' style='width:50px'></td>
-      <td><select id='cg_${idx}_smart' style='max-width:150px'>${smartOptions}</select></td>
-      <td><select id='cg_${idx}_scene' style='max-width:100px'>${sceneOptions}</select></td>
-      <td style='text-align:center'><span id='cg_${idx}_bw'>—</span></td>
-      <td><button class='btn btn-outline' style='padding:2px 8px;font-size:12px' onclick='removeCCTVGroup(${idx})'>✕</button></td>
-    </tr>`;
+    <div class='cctv-group-row' id='cg_${idx}'>
+      <div class='cctv-group-head'>
+        <div class='cctv-group-title'>Grupo ${idx + 1}</div>
+        <button class='btn btn-outline cctv-remove-btn' onclick='removeCCTVGroup(${idx})'>✕</button>
+      </div>
+      <div class='cctv-mini-grid'>
+        <div class='cctv-mini-field'>
+          <label>Cant.</label>
+          <input type='number' id='cg_${idx}_qty' value='1' min='1' max='999'>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>Resolución</label>
+          <select id='cg_${idx}_res'>${resOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>Codec</label>
+          <select id='cg_${idx}_codec'>${codecOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>FPS</label>
+          <input type='number' id='cg_${idx}_fps' value='15' min='1' max='60'>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>Smart Codec</label>
+          <select id='cg_${idx}_smart'>${smartOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>Escena</label>
+          <select id='cg_${idx}_scene'>${sceneOptions}</select>
+        </div>
+        <div class='cctv-mini-field wide'>
+          <label>PoE</label>
+          <select id='cg_${idx}_poe' onchange='syncCCTVPoeWatts(${idx})'>${poeOptions}</select>
+        </div>
+        <div class='cctv-mini-field'>
+          <label>W</label>
+          <input type='number' id='cg_${idx}_poe_w' value='7.5' min='0' step='0.1'>
+        </div>
+      </div>
+    </div>`;
   document.getElementById("cctvGroupBody").insertAdjacentHTML("beforeend", row);
   window._cctvGroupCount++;
   updateGroupCount();
@@ -1102,7 +1260,7 @@ function removeCCTVGroup(idx) {
 }
 
 function updateGroupCount() {
-  const rows = document.querySelectorAll("#cctvGroupBody tr").length;
+  const rows = document.querySelectorAll("#cctvGroupBody .cctv-group-row").length;
   const el = document.getElementById("groupCount");
   if (el) {
     el.style.display = rows ? "block" : "none";
@@ -1114,8 +1272,15 @@ function updateBitratePreview(idx) {
   // Preview bitrate for a group (can be called on change)
 }
 
+function syncCCTVPoeWatts(idx) {
+  const sel = document.getElementById(`cg_${idx}_poe`);
+  const watts = sel?.selectedOptions?.[0]?.dataset?.watts;
+  const input = document.getElementById(`cg_${idx}_poe_w`);
+  if (input && watts) input.value = watts;
+}
+
 async function execCCTCCalc() {
-  const rows = document.querySelectorAll("#cctvGroupBody tr");
+  const rows = document.querySelectorAll("#cctvGroupBody .cctv-group-row");
   if (!rows.length) {
     document.getElementById("cctcCalcResult").innerHTML = `<div class='result-box' style='color:var(--danger)'>Agregá al menos un grupo de cámaras</div>`;
     return;
@@ -1129,12 +1294,16 @@ async function execCCTCCalc() {
     const fps = document.getElementById(`cg_${id}_fps`)?.value;
     const smart = document.getElementById(`cg_${id}_smart`)?.value;
     const scene = document.getElementById(`cg_${id}_scene`)?.value;
+    const poe = document.getElementById(`cg_${id}_poe`)?.value;
+    const poeWatts = document.getElementById(`cg_${id}_poe_w`)?.value;
     if (res && codec) {
       groups.push({
         cameras: parseInt(qty) || 1,
         resolution: res, codec: codec,
         fps: parseInt(fps) || 15,
-        smart_codec: smart, scene: scene
+        smart_codec: smart, scene: scene,
+        poe_profile: poe,
+        poe_watts: parseFloat(poeWatts) || 7.5
       });
     }
   });
@@ -1143,12 +1312,14 @@ async function execCCTCCalc() {
   const motion = document.getElementById("cc_motion").value || 100;
   const days = document.getElementById("cc_days").value || 30;
   const storage = document.getElementById("cc_storage").value || 2000;
+  const nvrChannels = document.getElementById("cc_nvr")?.value || "";
 
   const params = new URLSearchParams({
     calc: "cctv_calc", recording_hours: hours,
     motion_percent: motion, retention_days: days,
     total_storage_gb: storage, groups: JSON.stringify(groups)
   });
+  if (nvrChannels) params.set("nvr_channels", nvrChannels);
 
   try {
     const resp = await (await fetch(`${API}/calculators/run?${params}`)).json();
@@ -1158,7 +1329,13 @@ async function execCCTCCalc() {
       return;
     }
     const r = resp.result;
+    const poeTotal = r.poe?.total_watts ?? r.bandwidth?.poe_budget_watts ?? 0;
+    const poeSwitches = Array.isArray(r.poe?.recommended_switch) ? r.poe.recommended_switch : [];
+    const warningHtml = (r.warnings || []).length
+      ? `<div class='section'><div class='section-header' style='color:var(--warning)'>⚠️ Alertas</div><div class='section-body'>${r.warnings.map(w => `<div class='cmd-item'>${escapeHtml(w)}</div>`).join("")}</div></div>`
+      : "";
     let html = `
+      ${warningHtml}
       <div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px'>
         <div class='section'>
           <div class='section-header' style='color:var(--success)'>💾 Saving Time</div>
@@ -1189,9 +1366,16 @@ async function execCCTCCalc() {
             <hr style='border-color:var(--border);margin:6px 0'>
             <div class='cmd-item'><span style='color:var(--accent2)'>Switch:</span> ${r.bandwidth.recommended_switch}</div>
             <div class='cmd-item'><span style='color:var(--accent2)'>Puertos:</span> ${r.bandwidth.switch_ports}</div>
-            <div class='cmd-item'><span style='color:var(--accent2)'>PoE:</span> ${r.bandwidth.poe_budget_watts} W</div>
+            <div class='cmd-item'><span style='color:var(--accent2)'>PoE:</span> ${poeTotal} W</div>
+            ${r.nvr ? `<div class='cmd-item'><span style='color:var(--accent2)'>NVR:</span> ${r.nvr.channels_limit || "sin límite"} canales · ${r.nvr.channels_ok ? "OK" : "excede"}</div>` : ""}
           </div>
         </div>
+        ${poeSwitches.length ? `<div class='section'>
+          <div class='section-header' style='color:var(--accent2)'>⚡ PoE recomendado</div>
+          <div class='section-body'>
+            ${poeSwitches.map(s => `<div class='cmd-item'><strong>${escapeHtml(s.model)}</strong><div style='color:var(--text2)'>Budget: ${s.budget_w} W · Cámaras: ${s.cameras_fit}</div></div>`).join("")}
+          </div>
+        </div>` : ""}
       </div>`;
 
     // Per-group breakdown
@@ -1200,19 +1384,20 @@ async function execCCTCCalc() {
         <thead><tr style='background:var(--bg2)'>
           <th style='padding:6px'>#</th><th style='padding:6px'>Cámaras</th><th style='padding:6px'>Resolución</th>
           <th style='padding:6px'>Codec</th><th style='padding:6px'>FPS</th><th style='padding:6px'>Smart</th>
-          <th style='padding:6px'>Escena</th><th style='padding:6px'>Bitrate</th><th style='padding:6px'>GB/día</th>
+          <th style='padding:6px'>Escena</th><th style='padding:6px'>Bitrate</th><th style='padding:6px'>GB/día</th><th style='padding:6px'>PoE</th>
         </tr></thead><tbody>`;
     r.groups.forEach((g, i) => {
       html += `<tr>
         <td style='padding:4px'>${i+1}</td>
         <td style='padding:4px'>${g.cameras}</td>
-        <td style='padding:4px'>${groups[i].resolution}</td>
-        <td style='padding:4px'>${groups[i].codec}</td>
-        <td style='padding:4px'>${groups[i].fps}</td>
-        <td style='padding:4px'>${groups[i].smart_codec}</td>
-        <td style='padding:4px'>${groups[i].scene}</td>
+        <td style='padding:4px'>${g.resolution || groups[i].resolution}</td>
+        <td style='padding:4px'>${g.codec || groups[i].codec}</td>
+        <td style='padding:4px'>${g.fps || groups[i].fps}</td>
+        <td style='padding:4px'>${g.smart_codec || groups[i].smart_codec}</td>
+        <td style='padding:4px'>${g.scene || groups[i].scene}</td>
         <td style='padding:4px;font-weight:600'>${g.bitrate_mbps} Mbps (${g.bitrate_kbps} Kbps)</td>
         <td style='padding:4px'>${g.storage_per_day_gb_total} GB</td>
+        <td style='padding:4px'>${g.poe_watts_total ?? ""} W</td>
       </tr>`;
     });
     html += `</tbody></table></div></div>`;
@@ -1229,11 +1414,11 @@ async function execCCTCCalc() {
         html += `<tr>
           <td style='padding:4px;font-weight:600'>${h.count}x ${h.size_label}</td>
           <td style='padding:4px'>${h.model}</td>
-          <td style='padding:4px'>${h.total_gb} GB</td>
-          <td style='padding:4px'>${h.raid0} GB</td>
-          <td style='padding:4px'>${h.raid1} GB</td>
-          <td style='padding:4px'>${h.raid5} GB</td>
-          <td style='padding:4px'>${h.raid10} GB</td>
+          <td style='padding:4px'>${h.total_gb ?? h.total_raw_gb} GB</td>
+          <td style='padding:4px'>${h.raid0 ?? h.raid0_gb} GB</td>
+          <td style='padding:4px'>${h.raid1 ?? h.raid1_gb} GB</td>
+          <td style='padding:4px'>${h.raid5 ?? h.raid5_gb} GB</td>
+          <td style='padding:4px'>${h.raid10 ?? h.raid10_gb} GB</td>
         </tr>`;
       });
       html += `</tbody></table></div></div>`;
@@ -1444,7 +1629,7 @@ function startTask(label, url, resultElId, renderFn) {
 
 // Compat: old asyncFetch redirects to new system
 function asyncFetch(url, resultElId, renderFn) {
-  const label = url.replace(/^.*\/api\//, "").replace(/\?.*$/, "").replace(/[-_]/g, " ");
+  const label = url.split("/api/").pop().split("?")[0].replace(/[-_]/g, " ");
   return startTask(label, url, resultElId, renderFn);
 }
 
@@ -2317,7 +2502,8 @@ async function showFullScript(cat) {
   `);
 }
 
-function escapeHtml(str) {
+function escapeHtml(value) {
+  const str = value == null ? "" : (typeof value === "string" ? value : JSON.stringify(value));
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 

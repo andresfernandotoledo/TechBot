@@ -25,6 +25,7 @@ from techbot.calculators.cctv_calc import (
     compute, calc_group, get_bitrate_kbps,
     BITRATE_TABLE, RESOLUTIONS, CODECS,
     SMART_CODECS, SCENE_FACTORS, RESOLUTION_INFO,
+    POE_PROFILES, NVR_CHANNEL_LIMITS,
 )
 from techbot.scripts import network_scripts, system_scripts, dhcp_scripts, dns_scripts, security_scripts
 from techbot.apis.hikvision_api import HikvisionClient, HIKVISION_API
@@ -210,6 +211,8 @@ def api_calculators():
                     "codecs": CODECS,
                     "smart_codecs": list(SMART_CODECS.keys()),
                     "scenes": list(SCENE_FACTORS.keys()),
+                    "poe_profiles": POE_PROFILES,
+                    "nvr_channels": NVR_CHANNEL_LIMITS,
                     "res_info": {k: f"{v[0]}x{v[1]} ({v[2]:.1f}MP)" for k, v in RESOLUTION_INFO.items()},
                 }
             },
@@ -226,6 +229,14 @@ def api_calculator_run():
             result = subnet_calc(request.args["ip"], int(request.args["cidr"]))
         elif calc == "bandwidth_calc":
             result = network_calc.bandwidth_calc(float(request.args["mbps"]), float(request.args["duration_minutes"]))
+        elif calc == "vlsm":
+            hosts = request.args.getlist("hosts_per_subnet")
+            if not hosts and request.args.get("hosts_per_subnet"):
+                hosts = request.args["hosts_per_subnet"].split(",")
+            result = network_calc.vlsm(
+                request.args["base_network"],
+                [int(h.strip()) for h in hosts if h.strip()]
+            )
         elif calc == "transfer_time":
             result = network_calc.transfer_time(float(request.args["file_size_mb"]), float(request.args["speed_mbps"]))
         elif calc == "cidr_to_mask":
@@ -242,6 +253,10 @@ def api_calculator_run():
             result = conversions.celsius_to_fahrenheit(float(request.args["c"]))
         elif calc == "dbm_to_mw":
             result = network_calc.decibels_to_mw(float(request.args["dbm"]))
+        elif calc == "mw_to_dbm":
+            result = network_calc.mw_to_dbm(float(request.args["mw"]))
+        elif calc == "awg_to_mm2":
+            result = conversions.awg_to_mm2(int(request.args["awg"]))
         elif calc == "battery_capacity":
             result = electrical_calc.battery_capacity(float(request.args["load_w"]), float(request.args["hours"]), float(request.args["voltage"]))
         elif calc == "solar_panel_required":
@@ -255,6 +270,7 @@ def api_calculator_run():
                 motion_percent=int(request.args.get("motion_percent", 100)),
                 retention_days=int(request.args.get("retention_days", 30)),
                 total_storage_gb=float(request.args.get("total_storage_gb", 2000)),
+                nvr_channels=int(request.args["nvr_channels"]) if request.args.get("nvr_channels") else None,
             )
         else:
             return jsonify({"error": f"Calculadora '{calc}' no encontrada"}), 400
