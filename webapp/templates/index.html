@@ -868,11 +868,11 @@ let allCmdsData = {};
 async function loadCommands(vendor, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   btn.classList.add("active");
+  window._cmdVendor = vendor;
   try {
     allCmdsData = await (await fetch(`${API}/commands?vendor=${vendor}`)).json();
   } catch(e) { allCmdsData = {}; }
   renderCommands("");
-  window._cmdVendor = vendor;
 }
 
 function renderCommands(q) {
