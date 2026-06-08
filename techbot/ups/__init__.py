@@ -251,61 +251,254 @@ UPS_ALARM_DESCRIPTIONS = {
     "internalFault": "Fallo interno del UPS — servicio técnico",
 }
 
-DIAGNOSTIC_PROCEDURE = """\
-PROCEDIMIENTO DE DIAGNÓSTICO DE UPS
-════════════════════════════════════
-
-1. VERIFICACIÓN FÍSICA
-   • ¿El UPS emite pitidos? (intermitente=batería baja, continuo=fallo)
-   • ¿Luces LED? (rojo=problema, amarillo=advertencia, verde=OK)
-   • ¿Ventilador gira? (si no, sobrecalentamiento posible)
-   • ¿Cables firmes? ¿Baterías conectadas?
-   • ¿Olor a quemado, componentes hinchados, líquido?
-
-2. VERIFICACIÓN POR NUT (Network UPS Tools)
-   upsc <ups>@<host>         — estado completo
-   upsc -l                   — listar UPS disponibles
-   upscmd <ups> shutdown.return — apagar/encender
-   upscmd <ups> test.battery.start.quick — test rápido batería
-   upscmd <ups> test.battery.start.deep — test profundo
-
-3. VERIFICACIÓN SNMP (UPS-MIB + vendor MIBs)
-   snmpget/upsBatteryMinutesRemaining — minutos restantes
-   snmpget/upsOutputPercentLoad        — carga actual (%)
-   snmpget/upsBatteryChargeRemaining   — carga batería (%)
-   snmpget/upsInputVoltage             — tensión entrada
-   snmpget/upsOutputVoltage            — tensión salida
-
-4. INDICADORES DE PROBLEMAS
-
-⚠ Pitido intermitente en línea normal → Batería agotada
-   Verificar charge < 80%, ejecutar test batería
-
-⚠ Equipos se apagan con UPS conectado → Sobrecarga
-   Verificar load > 80%, desconectar equipos no críticos
-
-⚠ No cambia a batería sin línea → Fallo inversor/transferencia
-   inputVoltage=0 pero outputSource≠4 → servicio técnico
-
-⚠ Autonomía muy corta → Baterías envejecidas (>3-5 años)
-   Revisar runtime vs especificación, programar reemplazo
-
-⚠ Sobrecalentamiento → Temperatura > 40°C
-   Mejorar ventilación, reducir carga < 70%
-
-5. COMANDOS POR FABRICANTE
-   APC:     apcaccess, apcupsd, PowerChute
-   CyberPower: pwrstat -status, pwrstat -pwroff
-   Eaton:   Interfaz web, SNMP .1.3.6.1.4.1.534
-   Tripp Lite: Interfaz web, SNMP .1.3.6.1.4.1.850
-   Vertiv:  SNMP .1.3.6.1.4.1.17055
-
-6. MANTENIMIENTO RECOMENDADO
-   • Monitoreo NUT centralizado con upsmon
-   • Alertas SNMP trap / email
-   • Pruebas automáticas de batería semanales
-   • Reemplazo de baterías cada 3-5 años
-"""
+DIAGNOSTIC_PROCEDURE = {
+  "title": "Manual de Diagnóstico de UPS",
+  "sections": [
+    {
+      "icon": "🔍",
+      "title": "1. Inspección Física",
+      "checks": [
+        {"q": "¿El UPS emite pitidos?", "ok": "Silencio o pitido breve al encender", "bad": "Intermitente = batería baja / Continuo = fallo grave", "tip": "Pitido cada 30s = batería descargada. Pitido continuo = sobrecarga o inversor dañado"},
+        {"q": "¿Luces LED?", "ok": "Verde fijo = normal", "bad": "Rojo = problema / Ámbar = advertencia / Apagado = sin energía", "tip": "Consultar manual del fabricante para patrón de LEDs"},
+        {"q": "¿Ventilador gira?", "ok": "Gira suavemente sin ruido extraño", "bad": "No gira o hace ruido (rodamientos secos)", "tip": "UPS sobrecargado o con ventilador tapado = sobrecalentamiento"},
+        {"q": "¿Cables y conexiones?", "ok": "Firmes, sin oxidación, baterías bien conectadas", "bad": "Flojos, sulfatados, bornes corroídos", "tip": "Bornes de batería sulfatados → limpiar con bicarbonato y agua"},
+        {"q": "¿Olor, fugas o deformaciones?", "ok": "Sin olor, sin líquido, sin hinchazón", "bad": "Olor a quemado / Líquido / Batería hinchada", "tip": "⚠️ Si la batería está hinchada, reemplazar URGENTE (riesgo de explosión)"},
+      ]
+    },
+    {
+      "icon": "📊",
+      "title": "2. Análisis de Estado General",
+      "checks": [
+        {"q": "Tensión de entrada (220/110V)", "ok": "220V ±10% o 110V ±10%", "bad": "Fuera de rango o 0V", "tip": "0V = corte de línea. Si es constante, revisar instalación eléctrica"},
+        {"q": "Tensión de salida", "ok": "220V ±5% o 110V ±5% estable", "bad": "Fluctuante o fuera de rango", "tip": "Si fluctúa sin carga → inversor dañado"},
+        {"q": "Carga actual (load %)", "ok": "30-70% de la capacidad nominal", "bad": ">80% (sobrecarga) o <10% (infrautilizado)", "tip": ">80% → los equipos se apagarán al cortar la línea. <10% → estás desperdiciando capacidad"},
+        {"q": "Carga de batería", "ok": "100% después de 4-6h de carga", "bad": "<80% después de 8h conectado", "tip": "Si no carga al 100%, la batería está sulfatada o el cargador falla"},
+        {"q": "Autonomía restante", "ok": "≥ 80% de la especificación original", "bad": "< 50% de la original", "tip": "Ej: UPS nuevo daba 15min, ahora da 5min = batería a reemplazar"},
+        {"q": "Temperatura interna", "ok": "20-35°C", "bad": ">40°C", "tip": ">40°C reduce vida de baterías un 50% por cada 10°C adicionales"},
+      ]
+    },
+    {
+      "icon": "🔋",
+      "title": "3. Pruebas de Batería",
+      "checks": [
+        {"q": "Prueba rápida (10-30s)", "ok": "UPS cambia a batería y vuelve sin apagar equipos", "bad": "Se apaga o no cambia a batería", "tip": "Si se apaga durante la prueba → batería agotada o inversor dañado"},
+        {"q": "Prueba profunda (5-15min)", "ok": "Mantiene carga durante toda la prueba", "bad": "Se apaga antes de tiempo", "tip": "Medir el tiempo que dura. Si es <50% de lo esperado → reemplazar baterías"},
+        {"q": "Tiempo real con carga real", "ok": "Coincide con la prueba o es mayor", "bad": "Mucho menor que la prueba programada", "tip": "Conectá una carga conocida (ej: 500W) y cronometrá cuánto dura"},
+        {"q": "Tensión en reposo (batería)", "ok": "12.5-13.0V (batería 12V) / 24.5-25.5V (24V)", "bad": "<12V (12V) o <24V (24V)", "tip": "Medir con multímetro en bornes de batería, SIN carga y SIN cargador"},
+      ]
+    },
+    {
+      "icon": "⚠️",
+      "title": "4. Síntomas y Soluciones (por problema)",
+      "checks": [
+        {"q": "Pitido intermitente en línea normal", "ok": "Silencio", "bad": "Pitido cada 15-30s", "tip": "🔋 Batería agotada → ejecutar test de batería. Si charge <80%, reemplazar."},
+        {"q": "Los equipos se apagan con UPS conectado", "ok": "Equipos funcionan normalmente", "bad": "Se apagan al cortar la línea o al conectar más equipos", "tip": "⚡ Sobrecarga → verificar load%. Desconectar equipos no críticos o ampliar UPS."},
+        {"q": "No cambia a batería cuando corta la luz", "ok": "Cambia instantáneamente (0-10ms)", "bad": "Equipos se reinician o no cambia", "tip": "🔌 Fallo inversor/transferencia → si inputVoltage=0 pero outputSource≠4, servicio técnico."},
+        {"q": "Autonomía muy corta (2-3min cuando daba 15min)", "ok": "Autonomía normal", "bad": "Cayó drásticamente", "tip": "⏳ Baterías envejecidas (>3-5 años) → medir tensión en reposo, programar reemplazo."},
+        {"q": "UPS caliente al tacto", "ok": "Templado (30-40°C)", "bad": "Muy caliente (>50°C)", "tip": "🌡️ Sobrecalentamiento → mejorar ventilación, reducir carga <70%. Si persiste, ventilador dañado."},
+        {"q": "No enciende ni con batería ni con línea", "ok": "Enciende normalmente", "bad": "No da señal de vida", "tip": "🪫 Fusible interno quemado o batería totalmente descargada. Probar reemplazo de fusible."},
+        {"q": "Zumbido o vibración excesiva", "ok": "Silencio electromagnético normal", "bad": "Zumbido fuerte o vibración", "tip": "🔊 Transformador o bobina dañados → servicio técnico."},
+        {"q": "Se dispara el térmico / fusible de entrada", "ok": "No se dispara", "bad": "Salta al conectar el UPS", "tip": "🔴 Cortocircuito interno o componentes de entrada dañados → no intentar reparar, llamar técnico."},
+      ]
+    },
+    {
+      "icon": "🛠️",
+      "title": "5. Mantenimiento Preventivo",
+      "checks": [
+        {"q": "Frecuencia", "ok": "", "bad": "", "tip": "Cada 3 meses: inspección visual + prueba rápida. Cada 6 meses: prueba profunda + limpieza."},
+        {"q": "Limpieza", "ok": "", "bad": "", "tip": "Limpiar rejillas de ventilación con aire comprimido (sin abrir). No usar líquidos."},
+        {"q": "Ciclo de batería", "ok": "", "bad": "", "tip": "Descargar batería al 50% cada 3 meses y recargar completamente. Esto evita sulfatación."},
+        {"q": "Reemplazo de baterías", "ok": "", "bad": "", "tip": "VRLA: cada 3-5 años. Li-Ion: cada 8-10 años. NiCd: cada 10-15 años."},
+        {"q": "Registro de eventos", "ok": "", "bad": "", "tip": "Llevar log de pruebas, cambios de batería, cortes de luz. Ayuda a detectar tendencias."},
+        {"q": "Monitoreo", "ok": "", "bad": "", "tip": "Usar NUT + upsmon para monitoreo centralizado. Configurar alertas SNMP trap o email."},
+      ]
+    },
+    {
+      "icon": "📋",
+      "title": "6. Flujo de Diagnóstico (Árbol de decisiones)",
+      "tree": [
+        "¿El UPS enciende?",
+        "  ├── No → ¿Hay línea? → No → Revisar cable, térmico, fusible",
+        "  │   └── Sí → ¿Pitido continuo? → Sí → Inversor dañado → Servicio técnico",
+        "  │       └── No → Fusible interno o batería 0V → Abrir y revisar",
+        "  └── Sí → ¿Carga normal (LED verde)?",
+        "      ├── No → LED rojo/ámbar → Revisar sección 2 (Análisis de Estado)",
+        "      └── Sí → ¿Prueba de batería pasa?",
+        "          ├── No → Batería agotada → Reemplazar",
+        "          │   └── ¿Sigue fallando? → Cargador o placa de carga dañada",
+        "          └── Sí → ¿Autonomía aceptable?",
+        "              ├── Sí → UPS OK. Realizar mantenimiento preventivo.",
+        "              └── No → Baterías envejecidas → Programar reemplazo",
+      ]
+    },
+    {
+      "icon": "🔧",
+      "title": "8. Soluciones Paso a Paso",
+      "solutions": [
+        {
+          "problem": "Reemplazar batería VRLA",
+          "tools": "Destornillador, multímetro, batería nueva del mismo voltaje y capacidad",
+          "steps": [
+            "Apagar el UPS y desconectar de la corriente",
+            "Esperar 5min para que se descarguen los capacitores internos",
+            "Abrir la tapa del compartimiento de baterías (generalmente tapa frontal o inferior)",
+            "Identificar los bornes: rojo = positivo (+), negro = negativo (-)",
+            "CON PRECAUCIÓN: medir tensión con multímetro para confirmar que está descargada",
+            "Desconectar primero el borne negativo (negro), luego el positivo (rojo)",
+            "Sacar la batería vieja — NO hacer cortocircuito entre bornes con herramientas metálicas",
+            "Colocar la batería nueva: conectar primero positivo (+), luego negativo (-)",
+            "Cerrar tapa, conectar el UPS a la corriente y encender",
+            "Dejar cargando 8-12h antes de hacer pruebas de autonomía",
+            "Verificar que el UPS ya no emite pitidos y el LED está verde"
+          ],
+          "warnings": [
+            "⚠️ Las baterías contienen ácido sulfúrico. No perforar ni incinerar.",
+            "⚠️ Descartar la batería vieja en un punto limpio o centro de reciclaje.",
+            "⚠️ Si la batería está hinchada o tiene fugas, usar guantes y gafas de protección."
+          ]
+        },
+        {
+          "problem": "Cambiar fusible interno",
+          "tools": "Destornillador, fusible de repuesto del mismo amperaje y tipo",
+          "steps": [
+            "DESCONECTAR el UPS de la corriente y de todos los equipos",
+            "Esperar 10min para descarga completa de capacitores",
+            "Abrir la carcasa del UPS (tornillos generalmente en la parte inferior o trasera)",
+            "Localizar el fusible en la placa principal (cerca de la entrada de corriente)",
+            "Sacar el fusible con un extractor o pinza de plástico (NO metálica si hay carga)",
+            "Inspeccionar visualmente: si está negro/roto o el filamento partido → quemado",
+            "Verificar el amperaje impreso en el fusible o en la placa (ej: 10A 250V)",
+            "Colocar el fusible nuevo del mismo amperaje exacto (NUNCA usar uno de mayor amperaje)",
+            "Cerrar carcasa, conectar a corriente y probar",
+            "Si el fusible vuelve a quemarse → hay cortocircuito en la placa → servicio técnico"
+          ],
+          "warnings": [
+            "⚠️ NO reemplazar por un fusible de mayor amperaje (riesgo de incendio).",
+            "⚠️ NO tocar componentes internos con las manos — algunos capacitores mantienen carga."
+          ]
+        },
+        {
+          "problem": "Reemplazar ventilador",
+          "tools": "Destornillador, ventilador nuevo (medir tamaño: 40x40, 60x60, 80x80mm), pasta térmica (opcional)",
+          "steps": [
+            "Apagar UPS y desconectar de corriente. Esperar 5min",
+            "Abrir la carcasa",
+            "Identificar el ventilador (generalmente en la parte trasera o lateral)",
+            "Desconectar el conector del ventilador de la placa (anotar posición/orientación)",
+            "Sacar los tornillos que sujetan el ventilador a la carcasa",
+            "Colocar el nuevo ventilador RESPETANDO LA DIRECCIÓN DEL FLUJO DE AIRE (flecha en el costado)",
+            "Conectar a la placa en la misma posición que el original",
+            "Cerrar carcasa, conectar corriente y verificar que gire suavemente"
+          ],
+          "warnings": [
+            "⚠️ El ventilador debe tener el MISMO voltaje que el original (12V generalmente).",
+            "⚠️ Si el ventilador no gira al encender, revisar la conexión o el conector en la placa."
+          ]
+        },
+        {
+          "problem": "UPS no enciende (sin señal de vida)",
+          "steps": [
+            "Verificar que el cable de corriente esté bien conectado al UPS y al toma",
+            "Probar el toma con otro equipo (lámpara, cargador) para confirmar que haya tensión",
+            "Si el toma tiene llave/interruptor, verificar que esté encendido",
+            "Revisar el fusible interno (ver guía de cambio de fusible arriba)",
+            "Medir tensión de batería con multímetro en los bornes internos",
+            "  → Si < 12V (batería 12V) o < 24V (batería 24V): batería totalmente descargada o muerta",
+            "  → Si 0V: fusible interno quemado o cable de batería desconectado",
+            "Si la batería está baja pero el UPS sigue sin encender: conectar un cargador externo a la batería por 1h y reintentar",
+            "Si aún así no enciende: placa de control dañada → servicio técnico"
+          ],
+          "warnings": [
+            "⚠️ No abrir el UPS si está en garantía.",
+            "⚠️ Internamente hay capacitores de alto voltaje. Esperar 10min desconectado antes de abrir."
+          ]
+        },
+        {
+          "problem": "UPS no cambia a batería cuando corta la luz",
+          "steps": [
+            "Verificar que la batería esté conectada internamente (bornes firmes, sin oxidación)",
+            "Medir tensión de batería con multímetro: debe ser 12.5-13V (12V) o 25-26V (24V)",
+            "  → Si es menor a 12V (12V): batería agotada → reemplazar",
+            "  → Si es normal (12.5V+): el inversor o el relé de transferencia está dañado",
+            "Escuchar si se escucha un 'clic' al cortar la luz (relé de transferencia)",
+            "  → Si NO se escucha clic: placa de control o relé dañado → servicio técnico",
+            "  → Si se escucha clic pero no hay salida: inversor dañado → servicio técnico"
+          ],
+          "warnings": [
+            "⚠️ Probar con una carga pequeña (una lámpara LED) para no dañar equipos sensibles."
+          ]
+        },
+        {
+          "problem": "Autonomía muy reducida (baterías duran menos de 5min)",
+          "steps": [
+            "Ejecutar prueba de batería desde el software del UPS o manual",
+            "Medir tensión en reposo (sin carga, sin cargador): debe ser 12.5-13V",
+            "  → Si es < 12.4V: batería sulfatada o envejecida",
+            "Medir tensión con carga (conectar una lámpara de 100W):",
+            "  → Si cae por debajo de 11V inmediatamente: batería agotada → reemplazar",
+            "Verificar temperatura del UPS durante la prueba:",
+            "  → Si se calienta mucho > 45°C: ventilador sucio o carga muy alta",
+            "Si la batería tiene más de 3 años → programar reemplazo",
+            "Si la batería es nueva pero no dura → UPS tiene fuga interna o carga demasiado alta"
+          ],
+          "warnings": [
+            "⚠️ No hacer pruebas de autonomía con equipos críticos conectados."
+          ]
+        },
+        {
+          "problem": "Resetear UPS por software",
+          "tools": "NUT: upscmd, APC: apctest, CyberPower: pwrstat",
+          "steps": [
+            "OPCIÓN 1 — Reset por NUT:",
+            "  upscmd <nombre> shutdown.return  — apaga y enciende cuando vuelva la línea",
+            "  upscmd <nombre> test.battery.start.quick — test rápido",
+            "OPCIÓN 2 — Reset físico (la mayoría de UPS):",
+            "  Desconectar de la corriente y pulsar botón de encendido 10-15s (descarga residuos)",
+            "  Esperar 30s, conectar a corriente sin equipos conectados",
+            "  Encender el UPS y esperar que cargue 5min",
+            "  Si enciende normalmente → conectar equipos de a uno",
+            "OPCIÓN 3 — UPS con display:",
+            "  Ingresar al menú de configuración → buscar 'Reset' o 'Factory Default'",
+            "  Confirmar y esperar reinicio"
+          ]
+        },
+      ]
+    },
+    {
+      "icon": "🔧",
+      "title": "7. Comandos por Herramienta",
+      "tools": {
+        "NUT": [
+          "upsc <nombre>@<host>       — Estado completo del UPS",
+          "upsc -l                    — Listar UPS disponibles",
+          "upscmd <ups> shutdown.return  — Apagar y encender cuando vuelva la línea",
+          "upscmd <ups> test.battery.start.quick — Test rápido (10s)",
+          "upscmd <ups> test.battery.start.deep  — Test profundo (hasta que batería llegue a low)",
+          "upscmd <ups> test.battery.stop        — Detener test",
+        ],
+        "APC (apcupsd)": [
+          "apcaccess                 — Estado completo del APC UPS",
+          "apcaccess status          — Resumen de estado",
+          "apctest                   — Prueba interactiva de batería",
+        ],
+        "CyberPower (pwrstat)": [
+          "pwrstat -status           — Estado completo",
+          "pwrstat -pwroff           — Apagar salida",
+          "pwrstat -pwron            — Encender salida",
+          "pwrstat -test             — Ejecutar prueba de batería",
+        ],
+        "SNMP (cualquier vendor)": [
+          "upsBatteryMinutesRemaining (1.3.6.1.2.1.33.1.2.3.0)  — Minutos restantes",
+          "upsOutputPercentLoad (1.3.6.1.2.1.33.1.4.4.1.5.1)    — Carga actual (%)",
+          "upsBatteryChargeRemaining (1.3.6.1.2.1.33.1.2.5.0)   — Carga batería (%)",
+          "upsInputVoltage (1.3.6.1.2.1.33.1.3.3.1.3.1)         — Tensión entrada",
+          "upsOutputVoltage (1.3.6.1.2.1.33.1.4.4.1.3.1)        — Tensión salida",
+          "upsEstimatedMinutesRemaining (1.3.6.1.2.1.33.1.2.3.0) — Tiempo restante estimado",
+        ],
+      }
+    },
+  ]
+}
 
 
 def _run_cmd(cmd, timeout=10):

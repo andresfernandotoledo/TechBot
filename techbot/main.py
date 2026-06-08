@@ -107,7 +107,7 @@ def menu_principal():
     print(f"  [E]  Comandos Linux (397)")
     print(f"  [F]  Comandos Windows (265)")
     print(f"  [G]  Diagnóstico")
-    print(f"  [H]  UPS - Monitoreo y Gestión")
+    print(f"  [H]  UPS - Monitoreo y Gestión (Zabbix + Diagnóstico)")
     print(f"  {'─'*56}")
     print(f"  Total: ~1533 comandos  |  [0] Salir")
     print(f"{'─'*56}")
@@ -740,84 +740,116 @@ def menu_diagnostico():
                 pausa()
 
 
+# ─── ZABBIX HELPERS PARA UPS ───────────────────────────────────
+
+def _menu_ups_zabbix():
+    from techbot.zabbix import ZabbixAPI, ZABBIX_API_URL, ZABBIX_DEFAULT_USER, ZABBIX_DEFAULT_PASS
+    from datetime import datetime
+    api_url = input(f"  URL Zabbix API [{ZABBIX_API_URL}]: ").strip() or ZABBIX_API_URL
+    user = input(f"  Usuario [{ZABBIX_DEFAULT_USER}]: ").strip() or ZABBIX_DEFAULT_USER
+    password = input(f"  Password [{ZABBIX_DEFAULT_PASS}]: ").strip() or ZABBIX_DEFAULT_PASS
+    try:
+        api = ZabbixAPI(api_url, user, password)
+        r = api.check_connection()
+        if not r.get("connected"):
+            print(f"  Error conexion: {r.get('error','')}")
+            return
+        print(f"  Conectado a Zabbix {r.get('version','')}")
+        hosts = api.get_hosts()
+        ups_hosts = []
+        for h in hosts:
+            name = (h.get("name", "") + " " + h.get("host", "")).lower()
+            templates = [t.get("name", "") for t in h.get("parentTemplates", [])]
+            tnames = " ".join(templates).lower()
+            if "ups" in name or "ups" in tnames:
+                ups_hosts.append(h)
+        if not ups_hosts:
+            print("  No se encontraron UPS monitoreados en Zabbix")
+            return
+        print(f"\n  UPS monitoreadas ({len(ups_hosts)}):")
+        for idx, h in enumerate(ups_hosts, 1):
+            tmpl = ", ".join(t.get("name", "") for t in h.get("parentTemplates", []))
+            print(f"  [{idx}] {h.get('name','')} ({h['host']})")
+            if tmpl:
+                print(f"       Templates: {tmpl}")
+        sel = input(f"\n  Seleccionar UPS [1-{len(ups_hosts)}] o Enter para volver: ").strip()
+        if not sel.isdigit() or int(sel) < 1 or int(sel) > len(ups_hosts):
+            return
+        h = ups_hosts[int(sel) - 1]
+        items = h.get("items", [])
+        if not items:
+            print("  Sin metricas disponibles")
+        else:
+            print(f"\n  Metricas de {h.get('name','')} ({len(items)}):")
+            for i in items:
+                lv = i.get("lastvalue", "N/A")
+                lc = i.get("lastclock", "0")
+                lc_fmt = datetime.fromtimestamp(int(lc)).strftime("%H:%M:%S") if lc != "0" else "N/A"
+                print(f"    {i.get('key_',''):<35} = {str(lv):<15} [{lc_fmt}]")
+    except Exception as e:
+        print(f"  Error Zabbix: {e}")
+
+
 # ─── UPS ──────────────────────────────────────────────────────
 
 def menu_ups():
-    from techbot.ups import NUTClient, UPSSNMPClient, DIAGNOSTIC_PROCEDURE, detect_ups, check_nut_available
+    from techbot.ups import DIAGNOSTIC_PROCEDURE, estimate_battery_life
     while True:
         clear()
         cabecera("UPS - MONITOREO Y GESTIÓN")
         print("""
-  [1] Estado via SNMP (UPS-MIB)
-  [2] Estado via NUT (Network UPS Tools)
-  [3] Detectar UPS en un host
-  [4] Diagnóstico y resolución de problemas
+  ── Zabbix (conexion remota) ──
+  [1] Conectar a Zabbix y ver UPS monitoreadas
+  ── Herramientas ──
+  [2] Diagnostico y resolucion de problemas
+  [3] Estimacion de vida de baterias
+  ── Alertas Push al Celular ──
+  [7] Configurar notificaciones (ntfy.sh)
+  [8] Ver configuracion de alertas
+  [9] Iniciar monitoreo de alertas en background
+  [A] Detener monitoreo de alertas
+  [B] Probar notificacion push
   [0] Volver
         """)
-        opc = input("  Opción: ").strip()
+        opc = input("  Opcion: ").strip()
         if opc == "0":
             break
         if opc == "1":
-            host = input("  Host: ").strip()
-            if not host:
-                continue
-            comm = input("  Community [public]: ").strip() or "public"
-            try:
-                cli = UPSSNMPClient(host, comm)
-                if not cli.check_access():
-                    print("  ❌ SNMP no accesible")
-                else:
-                    r = cli.get_summary()
-                    for k, v in r.items():
-                        print(f"    {k}: {v}")
-            except Exception as e:
-                print(f"  Error: {e}")
-            pausa()
+            _menu_ups_zabbix()
         elif opc == "2":
-            if not check_nut_available():
-                print("  ❌ NUT (upsc) no está instalado en este sistema")
-                print("     Instalá: sudo apt install nut-client (Linux)")
-                pausa()
-                continue
-            dest = input("  UPS@host [localhost]: ").strip()
-            ups_name = ""
-            host = "localhost"
-            if "@" in dest:
-                ups_name, host = dest.split("@", 1)
-            elif dest:
-                ups_name = dest
-            try:
-                cli = NUTClient(ups_name, host)
-                if not cli.is_available():
-                    print("  ❌ NUT no está disponible")
-                elif ups_name:
-                    r = cli.get_summary()
-                    for k, v in r.items():
-                        print(f"    {k}: {v}")
-                else:
-                    lista = cli.list_ups()
-                    if lista:
-                        print(f"\n  UPS disponibles: {', '.join(lista)}")
-                        print("  Usá: UPS@host (ej: APC@192.168.1.50)")
-                    else:
-                        print("  No se encontraron UPS. Verificá NUT.")
-            except Exception as e:
-                print(f"  Error: {e}")
+            print(DIAGNOSTIC_PROCEDURE)
             pausa()
         elif opc == "3":
-            host = input("  Host: ").strip()
-            if not host:
+            fecha = input("  Fecha de fabricacion (YYYY-MM-DD): ").strip()
+            if not fecha:
                 continue
-            comm = input("  Community [public]: ").strip() or "public"
-            try:
-                r = detect_ups(host, comm)
-                for k, v in r.items():
-                    print(f"    {k}: {v}")
-            except Exception as e:
-                print(f"  Error: {e}")
+            tipo = input("  Tipo de bateria [VRLA]: ").strip() or "VRLA"
+            r = estimate_battery_life(fecha, tipo)
+            for k, v in r.items():
+                print(f"    {k}: {v}")
             pausa()
-        elif opc == "4":
-            print(DIAGNOSTIC_PROCEDURE)
+        elif opc == "7":
+            from techbot.zabbix import configurar_alertas
+            configurar_alertas()
+            pausa()
+        elif opc == "8":
+            from techbot.zabbix import ver_config_alertas
+            ver_config_alertas()
+            pausa()
+        elif opc == "9":
+            from techbot.zabbix import iniciar_monitoreo
+            r = iniciar_monitoreo()
+            print(f"  {r['msg']}")
+            pausa()
+        elif opc.upper() == "A":
+            from techbot.zabbix import detener_monitoreo
+            r = detener_monitoreo()
+            print(f"  {r['msg']}")
+            pausa()
+        elif opc.upper() == "B":
+            from techbot.zabbix import probar_push
+            r = probar_push()
+            print(f"  {r['msg']}")
             pausa()
 
 

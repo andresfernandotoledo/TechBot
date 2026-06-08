@@ -4,7 +4,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, session
 from techbot.protocols.protocols_db import list_protocols, get_protocol, search_protocols
 from techbot.protocols.ports_db import COMMON_PORTS, get_port_service, search_ports
 from techbot.console_commands import CONSOLE_COMMANDS, search_commands
@@ -35,6 +35,7 @@ from techbot.access_control import (
     create_ac_client, ACCESS_CONTROL_INFO, EVENT_TYPES,
     CREDENTIAL_TYPES, DOOR_STATES
 )
+from techbot import tools as tech_tools
 from techbot.scanner import (
     scan_ports as scanner_scan_ports,
     quick_scan, discover_hosts, os_detection,
@@ -62,15 +63,20 @@ from techbot.ipam import (
 from techbot.mac_lookup import buscar_por_mac, buscar_por_fabricante, listar_fabricantes
 from techbot.speedtest import run_speedtest, get_progress
 from techbot.tasks import start_task, get_task, list_tasks
-from techbot.ups import (
-    NUTClient, UPSSNMPClient, ModbusUPSClient, PowerChuteClient,
-    APCUPSDClient, DIAGNOSTIC_PROCEDURE, detect_ups,
-    check_nut_available, UPS_MIB, BATTERY_STATUS_MAP,
-    OUTPUT_SOURCE_MAP, TEST_RESULT_MAP, VENDOR_MIBS,
-    get_apcaccess_status, get_pwrstat_status, estimate_battery_life,
+from techbot.ups import DIAGNOSTIC_PROCEDURE, estimate_battery_life
+from techbot.zabbix import ZabbixAPI, get_notificaciones, format_notificaciones, ZABBIX_API_URL, ZABBIX_DEFAULT_USER, ZABBIX_DEFAULT_PASS
+from techbot.monitor import start_monitor, stop_monitor, list_monitors
+from techbot.topology import (
+    list_topologies as topo_list,
+    get_topology as topo_get,
+    save_topology as topo_save,
+    delete_topology as topo_del
 )
+from techbot.topology.auto import discover_topology as auto_discover_topology
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "techbot-secret-key-change-in-prod")
+app.config["SESSION_COOKIE_NAME"] = "techbot_session"
 
 API_CLIENTS = {}
 AC_CLIENTS = {}
@@ -605,21 +611,25 @@ def _discover(subnet):
     return {"subnet": subnet, "hosts": hosts, "count": len(hosts)}
 
 def _scan_ping(host):
-    alive = ping_host(host)
+    result = ping_host(host)
     os_info = os_detection(host)
-    return {"host": host, "alive": alive, "os": os_info}
+    return {"host": host, "alive": result["alive"], "os": os_info, "latency": result.get("latency", 0), "ttl": result.get("ttl", -1)}
 
 def _traceroute(host):
     hops = traceroute(host)
     return {"host": host, "hops": hops}
 
-def _scan_ports(host, ports_str):
+def _scan_ports(host, ports_str, protocol="tcp"):
     ports = None
     if ports_str:
         ports = [int(p.strip()) for p in ports_str.split(",") if p.strip().isdigit()]
-    results = scanner_scan_ports(host, ports)
+    results = scanner_scan_ports(host, ports, protocol=protocol)
     os_info = os_detection(host)
-    return {"host": host, "os": os_info, "ports": results, "count": len(results)}
+    return {"host": host, "os": os_info, "ports": results, "count": len(results), "protocol": protocol}
+
+
+def _scan_udp_ports(host, ports_str):
+    return _scan_ports(host, ports_str, protocol="udp")
 
 def _scan_cctv(host):
     results = scan_cctv(host)
@@ -669,9 +679,9 @@ def api_scanner_ping():
 
 
 def _scanner_ping(host):
-    alive = ping_host(host)
+    result = ping_host(host)
     os_info = os_detection(host)
-    return {"host": host, "alive": alive, "os": os_info}
+    return {"host": host, "alive": result["alive"], "os": os_info, "latency": result.get("latency", 0), "ttl": result.get("ttl", -1)}
 
 
 @app.route("/api/scanner/traceroute")
@@ -693,6 +703,18 @@ def api_scanner_scan_ports():
         return jsonify({"error": "Host requerido"}), 400
     try:
         return _async_or_run(_scan_ports, host, ports_str)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/scanner/scan-ports-udp")
+def api_scanner_scan_ports_udp():
+    host = request.args.get("host", "")
+    ports_str = request.args.get("ports", "")
+    if not host:
+        return jsonify({"error": "Host requerido"}), 400
+    try:
+        return _async_or_run(_scan_udp_ports, host, ports_str)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -737,6 +759,119 @@ def api_scanner_ports_info():
         "ac_ports": sorted(AC_PORTS),
         "onvif_ports": sorted(ONVIF_PORTS),
     })
+
+
+@app.route("/api/scanner/compare", methods=["POST"])
+def api_scanner_compare():
+    data = request.get_json()
+    if not data or "scan1" not in data or "scan2" not in data:
+        return jsonify({"error": "scan1 y scan2 requeridos"}), 400
+    try:
+        return jsonify(compare_port_scans(data["scan1"], data["scan2"]))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/http-title")
+def api_tools_http_title():
+    host = request.args.get("host", "")
+    port = request.args.get("port", 80, type=int)
+    if not host:
+        return jsonify({"error": "Host requerido"}), 400
+    try:
+        _, _, _, _, banner, _ = scan_port(host, port, timeout=3)
+        title = ""
+        server = ""
+        for line in banner.split("\n"):
+            if line.lower().startswith("server:"):
+                server = line.split(":", 1)[1].strip()
+            elif "<title>" in line.lower():
+                m = __import__("re").search(r"<title>(.*?)</title>", line, __import__("re").IGNORECASE)
+                if m: title = m.group(1)
+        return jsonify({"host": host, "port": port, "title": title, "server": server, "banner_preview": banner[:300]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── TOOLS (DNS, SSL, WOL, HTTP, Token) ─────────────────────
+
+
+@app.route("/api/tools/dns")
+def api_tools_dns():
+    host = request.args.get("host", "")
+    rtype = request.args.get("type", "A")
+    if not host:
+        return jsonify({"error": "Host requerido"}), 400
+    try:
+        return jsonify(tech_tools.dns_lookup(host, rtype))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/dns/mx")
+def api_tools_dns_mx():
+    domain = request.args.get("domain", "")
+    if not domain:
+        return jsonify({"error": "Dominio requerido"}), 400
+    try:
+        return jsonify(tech_tools.dns_mx(domain))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/ssl")
+def api_tools_ssl():
+    host = request.args.get("host", "")
+    port = request.args.get("port", 443, type=int)
+    if not host:
+        return jsonify({"error": "Host requerido"}), 400
+    try:
+        return jsonify(tech_tools.ssl_cert_check(host, port))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/http-headers")
+def api_tools_http_headers():
+    url = request.args.get("url", "")
+    if not url:
+        return jsonify({"error": "URL requerida"}), 400
+    try:
+        return jsonify(tech_tools.http_headers(url))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/wol", methods=["POST"])
+def api_tools_wol():
+    data = request.get_json()
+    if not data or not data.get("mac"):
+        return jsonify({"error": "MAC requerida"}), 400
+    try:
+        broadcast = data.get("broadcast", "255.255.255.255")
+        port = data.get("port", 9)
+        return jsonify(tech_tools.wake_on_lan(data["mac"], broadcast, port))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/token")
+def api_tools_token():
+    length = request.args.get("length", 32, type=int)
+    use_digits = request.args.get("digits", "1") == "1"
+    use_symbols = request.args.get("symbols", "1") == "1"
+    try:
+        return jsonify(tech_tools.generate_token(length, use_digits, use_symbols))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/local-ip")
+def api_tools_local_ip():
+    try:
+        return jsonify(tech_tools.local_ip())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ─── SNMP ─────────────────────────────────────────────────────
@@ -1039,6 +1174,41 @@ def api_ipam_find_free():
     return jsonify(result)
 
 
+# ─── TOPOLOGÍA ────────────────────────────────────────────────
+
+@app.route("/api/topology/discover", methods=["POST"])
+def api_topology_discover():
+    data = request.get_json()
+    seed = data.get("seed", "")
+    community = data.get("community", "public")
+    depth = data.get("depth", 2)
+    if not seed:
+        return jsonify({"error": "IP semilla requerida"}), 400
+    try:
+        result = auto_discover_topology(seed, community, depth)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/topology", methods=["GET", "POST"])
+def api_topology_list():
+    if request.method == "POST":
+        data = request.json or {}
+        return jsonify(topo_save(data))
+    return jsonify(topo_list())
+
+
+@app.route("/api/topology/<topo_id>", methods=["GET", "DELETE"])
+def api_topology_detail(topo_id):
+    if request.method == "DELETE":
+        return jsonify({"success": topo_del(topo_id)})
+    topo = topo_get(topo_id)
+    if topo:
+        return jsonify(topo)
+    return jsonify({"error": "Topología no encontrada"}), 404
+
+
 # ─── SCRIPTS ──────────────────────────────────────────────────
 
 def _list_script_funcs(mod):
@@ -1147,76 +1317,39 @@ def api_speedtest():
 
 # ─── UPS ──────────────────────────────────────────────────────
 
-@app.route("/api/ups/info")
-def api_ups_info():
-    return jsonify({
-        "mib_oids": {k: v for k, v in list(UPS_MIB.items())[:15]},
-        "vendor_oids": VENDOR_MIBS,
-        "battery_status_map": {str(k): v for k, v in BATTERY_STATUS_MAP.items()},
-        "output_source_map": {str(k): v for k, v in OUTPUT_SOURCE_MAP.items()},
-        "test_result_map": {str(k): v for k, v in TEST_RESULT_MAP.items()},
-    })
+# ─── MONITOR ──────────────────────────────────────────────────
 
 
-def _ups_snmp(host, community):
-    cli = UPSSNMPClient(host, community)
-    if not cli.check_access():
-        raise RuntimeError("SNMP no accesible")
-    result = cli.get_full_status()
-    summary = cli.get_summary()
-    return {"full": result, "summary": summary}
-
-def _ups_detect(host, community):
-    return detect_ups(host, community)
-
-def _ups_nut(dest):
-    ups_name = ""
-    host = "localhost"
-    if "@" in dest:
-        ups_name, host = dest.split("@", 1)
-    elif dest:
-        ups_name = dest
-    cli = NUTClient(ups_name, host)
-    if not check_nut_available():
-        raise RuntimeError("NUT (upsc) no instalado")
-    if ups_name:
-        return cli.get_summary()
-    else:
-        lista = cli.list_ups()
-        return {"available_ups": lista, "disponibles": len(lista)}
-
-
-@app.route("/api/ups/snmp-status")
-def api_ups_snmp():
-    host = request.args.get("host", "")
-    community = request.args.get("community", "public")
-    if not host:
-        return jsonify({"error": "Host requerido"}), 400
+@app.route("/api/monitor/start", methods=["POST"])
+def api_monitor_start():
+    data = request.get_json()
+    subnet = data.get("subnet", "")
+    interval = data.get("interval", 300)
+    ntfy = data.get("ntfy_topic", "") or None
+    if not subnet:
+        return jsonify({"error": "Subred requerida"}), 400
     try:
-        return _async_or_run(_ups_snmp, host, community)
+        return jsonify(start_monitor(subnet, interval, ntfy))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/ups/detect")
-def api_ups_detect():
-    host = request.args.get("host", "")
-    community = request.args.get("community", "public")
-    if not host:
-        return jsonify({"error": "Host requerido"}), 400
+@app.route("/api/monitor/stop", methods=["POST"])
+def api_monitor_stop():
+    data = request.get_json()
+    subnet = data.get("subnet", "")
+    if not subnet:
+        return jsonify({"error": "Subred requerida"}), 400
     try:
-        return _async_or_run(_ups_detect, host, community)
+        return jsonify(stop_monitor(subnet))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/ups/nut-status")
-def api_ups_nut():
-    dest = request.args.get("ups", "")
-    if not dest:
-        return jsonify({"error": "UPS requerido (upsname@host o upsname)"}), 400
+@app.route("/api/monitor/list")
+def api_monitor_list():
     try:
-        return _async_or_run(_ups_nut, dest)
+        return jsonify(list_monitors())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1226,93 +1359,111 @@ def api_ups_diagnostics():
     return jsonify({"procedure": DIAGNOSTIC_PROCEDURE})
 
 
-def _ups_apc(host):
-    return get_apcaccess_status(host)
-
-def _ups_pwrstat():
-    return get_pwrstat_status()
-
-def _ups_modbus(host, port):
-    cli = ModbusUPSClient(host, port)
-    if not cli.check_access():
-        raise RuntimeError("Modbus TCP no accesible")
-    return cli.get_status()
-
-def _ups_powerchute(host, port, user, password, ssl):
-    cli = PowerChuteClient(host, port, user, password, ssl)
-    status = cli.get_status()
-    battery = cli.get_battery()
-    alarms = cli.get_alarms()
-    return {"status": status, "battery": battery, "alarms": alarms}
-
-def _ups_apcupsd(host, port):
-    cli = APCUPSDClient(host, port)
-    return cli.get_summary()
-
-
-@app.route("/api/ups/apcaccess")
-def api_ups_apc():
-    host = request.args.get("host", "")
-    try:
-        return _async_or_run(_ups_apc, host)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/ups/pwrstat")
-def api_ups_pwrstat():
-    try:
-        return _async_or_run(_ups_pwrstat)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/ups/modbus-status")
-def api_ups_modbus():
-    host = request.args.get("host", "")
-    port = int(request.args.get("port", 502))
-    if not host:
-        return jsonify({"error": "Host requerido"}), 400
-    try:
-        return _async_or_run(_ups_modbus, host, port)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/ups/powerchute-status")
-def api_ups_powerchute():
-    host = request.args.get("host", "")
-    port = int(request.args.get("port", 6547))
-    user = request.args.get("user", "")
-    password = request.args.get("password", "")
-    ssl = request.args.get("ssl", "false").lower() == "true"
-    if not host:
-        return jsonify({"error": "Host requerido"}), 400
-    try:
-        return _async_or_run(_ups_powerchute, host, port, user, password, ssl)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/ups/apcupsd-status")
-def api_ups_apcupsd():
-    host = request.args.get("host", "localhost")
-    port = int(request.args.get("port", 3551))
-    try:
-        return _async_or_run(_ups_apcupsd, host, port)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/api/ups/battery-life")
 def api_ups_battery_life():
     date = request.args.get("date", "")
     btype = request.args.get("type", "VRLA")
     if not date:
-        return jsonify({"error": "Fecha de fabricación requerida (YYYY-MM-DD)"}), 400
+        return jsonify({"error": "Fecha de fabricacion requerida (YYYY-MM-DD)"}), 400
     try:
         result = estimate_battery_life(date, btype)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── ZABBIX ────────────────────────────────────────────────────
+
+
+def _zabbix_from_session():
+    """Obtiene API URL y credenciales desde la sesion."""
+    api_url = session.get("zabbix_api_url")
+    user = session.get("zabbix_user")
+    password = session.get("zabbix_pass")
+    if not api_url:
+        return None, "No hay sesion activa. Conectá primero."
+    try:
+        api = ZabbixAPI(api_url, user, password)
+        return api, None
+    except Exception as e:
+        return None, str(e)
+
+
+@app.route("/api/ups/zabbix/connect", methods=["POST"])
+def api_ups_zabbix_connect():
+    """Guarda credenciales en sesion y prueba conexion."""
+    data = request.json or {}
+    api_url = data.get("api_url", ZABBIX_API_URL)
+    user = data.get("user", ZABBIX_DEFAULT_USER)
+    password = data.get("password", ZABBIX_DEFAULT_PASS)
+    try:
+        api = ZabbixAPI(api_url, user, password)
+        r = api.check_connection()
+        if r.get("connected"):
+            session["zabbix_api_url"] = api_url
+            session["zabbix_user"] = user
+            session["zabbix_pass"] = password
+        return jsonify(r)
+    except Exception as e:
+        return jsonify({"connected": False, "error": str(e)})
+
+
+@app.route("/api/ups/zabbix/status")
+def api_ups_zabbix_status():
+    api_url = session.get("zabbix_api_url")
+    if not api_url:
+        return jsonify({"connected": False})
+    return jsonify({
+        "connected": True,
+        "api_url": api_url,
+        "user": session.get("zabbix_user"),
+    })
+
+
+@app.route("/api/ups/zabbix/disconnect", methods=["POST"])
+def api_ups_zabbix_disconnect():
+    session.pop("zabbix_api_url", None)
+    session.pop("zabbix_user", None)
+    session.pop("zabbix_pass", None)
+    return jsonify({"connected": False})
+
+
+@app.route("/api/ups/zabbix/hosts")
+def api_ups_zabbix_hosts():
+    api, err = _zabbix_from_session()
+    if err:
+        return jsonify({"error": err}), 401
+    try:
+        hosts = api.get_hosts()
+        ups_hosts = []
+        for h in hosts:
+            name = (h.get("name", "") + " " + h.get("host", "")).lower()
+            templates = [t.get("name", "") for t in h.get("parentTemplates", [])]
+            tnames = " ".join(templates).lower()
+            if "ups" in name or "ups" in tnames:
+                ups_hosts.append({
+                    "hostid": h["hostid"],
+                    "host": h["host"],
+                    "name": h.get("name", ""),
+                    "status": h.get("status"),
+                    "templates": [t.get("name", "") for t in h.get("parentTemplates", [])],
+                    "items": [{"name": i.get("name", ""), "key_": i.get("key_", ""), "lastvalue": i.get("lastvalue", "N/A"), "units": i.get("units", "")} for i in h.get("items", [])],
+                })
+        return jsonify({"hosts": ups_hosts, "total": len(ups_hosts)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ups/zabbix/alerts")
+def api_ups_zabbix_alerts():
+    api, err = _zabbix_from_session()
+    if err:
+        return jsonify({"error": err}), 401
+    try:
+        n = get_notificaciones(api, limit=20)
+        if isinstance(n, dict) and "error" in n:
+            return jsonify({"error": n["error"]}), 500
+        return jsonify({"alerts": n, "total": len(n)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

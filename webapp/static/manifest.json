@@ -1,0 +1,21 @@
+{
+  "name": "TechBot",
+  "short_name": "TechBot",
+  "description": "Asistente técnico - Redes, CCTV, Sistemas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#0f3460",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "network"],
+  "lang": "es"
+}

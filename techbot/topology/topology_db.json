@@ -1,0 +1,15 @@
+{
+  "topologies": [
+    {
+      "name": "Test Topology",
+      "elements": [],
+      "id": "6d6b8dcb-4e44-4d76-8175-fe07a4799aa9",
+      "created_at": "2026-06-07T17:51:32.893604",
+      "updated_at": "2026-06-07T17:51:32.893631"
+    }
+  ],
+  "metadata": {
+    "created": "2026-06-07T17:51:30.983599",
+    "version": "1.0"
+  }
+}

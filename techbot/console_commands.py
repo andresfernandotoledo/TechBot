@@ -529,6 +529,18 @@ CONSOLE_COMMANDS = {
         ("check_nrpe -H host -c check_load", "Check NRPE"),
         ("zabbix_get -s host -k item.key", "Obtener item Zabbix"),
         ("zabbix_sender -z server -s host -k key -o value", "Enviar dato Zabbix"),
+        ("zabbix_sender -z server -s host -k key -o value -p 10051", "Enviar dato Zabbix (puerto específico)"),
+        ("zabbix_agentd -c /etc/zabbix/zabbix_agentd.conf", "Iniciar agente Zabbix"),
+        ("zabbix_agentd -t key", "Probar item del agente"),
+        ("zabbix_server -c /etc/zabbix/zabbix_server.conf", "Iniciar servidor Zabbix"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"apiinfo.version\",\"params\":{},\"id\":1}' -H 'Content-Type: application/json'", "API Zabbix - ver versión"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"user.login\",\"params\":{\"username\":\"Admin\",\"password\":\"zabbix\"},\"id\":2}' -H 'Content-Type: application/json'", "API Zabbix - login"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"host.get\",\"params\":{\"output\":\"extend\"},\"auth\":\"TOKEN\",\"id\":3}' -H 'Content-Type: application/json'", "API Zabbix - listar hosts"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"problem.get\",\"params\":{\"recent\":\"true\",\"limit\":\"10\"},\"auth\":\"TOKEN\",\"id\":4}' -H 'Content-Type: application/json'", "API Zabbix - problemas activos"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"trigger.get\",\"params\":{\"output\":\"extend\",\"filter\":{\"value\":\"1\"}},\"auth\":\"TOKEN\",\"id\":5}' -H 'Content-Type: application/json'", "API Zabbix - triggers activos"),
+        ("curl -X POST http://localhost:8080/api_jsonrpc.php -d '{\"jsonrpc\":\"2.0\",\"method\":\"host.create\",\"params\":{\"host\":\"UPS-192_168_1_50\",\"name\":\"UPS Oficina\",\"interfaces\":[{\"type\":1,\"main\":1,\"useip\":1,\"ip\":\"192.168.1.50\",\"dns\":\"\",\"port\":\"10050\"}],\"groups\":[{\"groupid\":\"2\"}],\"templates\":[{\"templateid\":\"10001\"}]},\"auth\":\"TOKEN\",\"id\":6}' -H 'Content-Type: application/json'", "API Zabbix - crear host UPS"),
+        ("snmpwalk -v2c -c public host 1.3.6.1.2.1.33", "SNMP walk UPS-MIB para Zabbix"),
+        ("snmptrap -v2c -c public localhost '' 1.3.6.1.4.1.318 UPS-MIB::upsTrapOnBattery", "Enviar trap SNMP UPS a Zabbix"),
     ],
 }
 
