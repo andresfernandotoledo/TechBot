@@ -241,13 +241,13 @@ Base de ~2500 OUI. Buscar por MAC o por nombre de fabricante.
 
 Escáner WiFi multiplataforma:
 
-| Plataforma | Método |
-|-----------|--------|
-| **APK Android** | WifiManager nativo vía `TechBotBridge.java` (sin root) |
-| **Termux** | `termux-wifi-scaninfo` (API Termux) |
-| **Linux** | `iw` → `iwlist` (requiere `cap_net_admin`) |
-| **Windows** | `netsh wlan show networks mode=bssid` |
-| **macOS** | `airport` |
+| Plataforma | Método | Requisitos |
+|-----------|--------|------------|
+| **APK Android** | WifiManager nativo vía `TechBotBridge.java` | WiFi encendido + permiso **Ubicación** (Android 10+ obliga para scan WiFi) |
+| **Termux** | `termux-wifi-scaninfo` | `pkg install termux-api && termux-wifi-scaninfo` |
+| **Linux** | `iw` → `iwlist` | `cap_net_admin` en `iw` |
+| **Windows** | `netsh wlan show networks mode=bssid` | — |
+| **macOS** | `airport` | — |
 
 Detección automática de interfaz + señal RSSI a porcentaje (0-100%) + conversión frecuencia→canal.
 

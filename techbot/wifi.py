@@ -7,7 +7,7 @@ import os
 import shutil
 
 OS = platform.system()
-_ANDROID = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ROOT' in os.environ
+_ANDROID = hasattr(sys, 'getandroidapilevel')  # Solo True en Chaquopy (APK). En Termux es False.
 
 
 def _is_termux():
@@ -229,10 +229,16 @@ def scan_wifi(interface=None):
             # bridge no disponible o sin redes → fallback
 
         # ── Termux API ──
-        if _is_termux() or shutil.which("termux-wifi-scaninfo"):
-            nets = _termux_scan()
-            if nets is not None and len(nets) > 0:
-                return {**result, "networks": nets, "count": len(nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
+        if _is_termux():
+            if shutil.which("termux-wifi-scaninfo"):
+                nets = _termux_scan()
+                if nets is not None and len(nets) > 0:
+                    return {**result, "networks": nets, "count": len(nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
+            # Termux sin termux-api instalado
+            if shutil.which("iw") or shutil.which("iwlist"):
+                pass  # probar iw/iwlist abajo
+            else:
+                return {**result, "error": "Instalá Termux:API: pkg install termux-api && termux-wifi-scaninfo"}
 
         # ── Linux: iw, luego iwlist (sin sudo) ──
         if OS == "Linux":
