@@ -672,3 +672,21 @@ body {
   .grid { grid-template-columns: repeat(2, 1fr); }
   .nav-item .nav-label { font-size: 8px; }
 }
+
+/* ─── COMPACT MODE ─── */
+body.compact .section { margin-bottom: 4px; }
+body.compact .section-body { padding: 6px 10px; }
+body.compact .section-header { padding: 4px 10px; font-size: 12px; }
+body.compact .input-group { margin-bottom: 4px; }
+body.compact .input-group input { padding: 4px 8px; font-size: 12px; }
+body.compact .btn { padding: 4px 10px; font-size: 12px; }
+body.compact .result-box { padding: 8px; max-height: 200px; }
+body.compact .cmd-item { padding: 3px 6px; }
+body.compact .header { padding: 8px 14px; }
+body.compact .header h1 { font-size: 18px; }
+body.compact .header p { font-size: 11px; }
+body.compact .home-card { padding: 8px; }
+body.compact .home-card .icon { font-size: 20px; }
+body.compact .home-card .label { font-size: 11px; }
+body.compact .bottom-nav { height: 44px; }
+body.compact .nav-item .nav-label { font-size: 9px; }

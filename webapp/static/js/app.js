@@ -297,6 +297,8 @@ async function openSection(name) {
     `;
     zabbixCheckSession();
   }
+  else if (name === "wifi") { showWiFi(); }
+  else if (name === "bandwidth") { showBandwidth(); }
 }
 
 // ─── PROTOCOLOS ──────────────────────────────────────────────
@@ -1211,8 +1213,19 @@ function showScanner() {
         <div id='notesList' class='text-sm' style='margin-top:6px'></div>
       </div>
     </div>
+    <div class='section'>
+      <div class='section-header'>📋 Auditoría + Backup</div>
+      <div class='section-body'>
+        <div style='display:flex;gap:6px;flex-wrap:wrap'>
+          <button class='btn btn-outline' onclick='generateReport()'>📋 Auditoría</button>
+          <button class='btn btn-outline' onclick='exportAllData()'>💾 Backup</button>
+          <button class='btn btn-outline' onclick='importAllData()'>📂 Restaurar</button>
+        </div>
+      </div>
+    </div>
   `;
   fadeIn($("results"));
+  renderNotes();
 }
 
 // ─── MONITOR ────────────────────────────────────────────────
@@ -1635,6 +1648,55 @@ function loadThemeAndCompact() {
 }
 
 document.addEventListener("DOMContentLoaded", loadThemeAndCompact);
+
+function showSettings() {
+  const currentTheme = localStorage.getItem("techbot_theme") || "azul";
+  const isCompact = localStorage.getItem("techbot_compact") === "1";
+  showModal(`
+    <button class='modal-close' onclick='closeModal()'>&times;</button>
+    <h2>⚙️ Ajustes</h2>
+    <div class='section' style='margin-top:8px'>
+      <div class='section-header'>🎨 Tema</div>
+      <div class='section-body'>
+        <div style='display:flex;gap:6px;flex-wrap:wrap'>
+          <button class='btn btn-sm ${currentTheme==="azul"?"btn":"btn-outline"}' onclick='setTheme("azul");closeModal();showSettings()' style='background:#00d4ff;color:#000;${currentTheme==="azul"?"border-color:#00d4ff":""}'>Azul</button>
+          <button class='btn btn-sm ${currentTheme==="verde"?"btn":"btn-outline"}' onclick='setTheme("verde");closeModal();showSettings()' style='background:#10b981;color:#000;${currentTheme==="verde"?"border-color:#10b981":""}'>Verde</button>
+          <button class='btn btn-sm ${currentTheme==="morado"?"btn":"btn-outline"}' onclick='setTheme("morado");closeModal();showSettings()' style='background:#a855f7;color:#000;${currentTheme==="morado"?"border-color:#a855f7":""}'>Morado</button>
+          <button class='btn btn-sm ${currentTheme==="rojo"?"btn":"btn-outline"}' onclick='setTheme("rojo");closeModal();showSettings()' style='background:#ef4444;color:#000;${currentTheme==="rojo"?"border-color:#ef4444":""}'>Rojo</button>
+          <button class='btn btn-sm ${currentTheme==="gris"?"btn":"btn-outline"}' onclick='setTheme("gris");closeModal();showSettings()' style='background:#64748b;color:#000;${currentTheme==="gris"?"border-color:#64748b":""}'>Gris</button>
+        </div>
+      </div>
+    </div>
+    <div class='section'>
+      <div class='section-header'>📦 Modo Compacto</div>
+      <div class='section-body'>
+        <label style='display:flex;align-items:center;gap:8px;cursor:pointer'>
+          <input type='checkbox' ${isCompact?"checked":""} onchange='toggleCompact();closeModal();showSettings()'>
+          <span class='text-sm'>Reducir espacio entre elementos</span>
+        </label>
+      </div>
+    </div>
+    <div class='section'>
+      <div class='section-header'>💾 Datos</div>
+      <div class='section-body'>
+        <div style='display:flex;gap:6px;flex-wrap:wrap'>
+          <button class='btn btn-outline btn-sm' onclick='exportAllData();closeModal()'>💾 Exportar todo</button>
+          <button class='btn btn-outline btn-sm' onclick='importAllData();closeModal()'>📂 Importar</button>
+          <button class='btn btn-outline btn-sm' style='color:var(--danger)' onclick='if(confirm("¿Limpiar todos los datos locales?")){localStorage.clear();location.reload()}'>🗑️ Limpiar todo</button>
+        </div>
+      </div>
+    </div>
+    <div class='section'>
+      <div class='section-header'>ℹ️ Acerca de</div>
+      <div class='section-body'>
+        <div class='text-sm'>TechBot v1.0 · 92 API endpoints · 232 funciones frontend</div>
+        <div class='text-xs text-muted'>Hecho para técnicos de campo. Sin dependencias externas (100% stdlib Python).</div>
+        <a href='#' onclick='event.preventDefault();showModal(\`<button class=\"modal-close\" onclick=\"closeModal()\">&times;</button><h2>📖 Ayuda Rápida</h2><div class=\"text-sm\"><p>• Usá el buscador global para encontrar comandos, protocolos y puertos</p><p>• El escáner de red usa TCP ping (no requiere privilegios)</p><p>• Los resultados se pueden exportar a JSON/CSV desde cada sección</p><p>• Las notas y favoritos se guardan en el navegador (localStorage)</p><p>• Hacé backup periódico desde Ajustes > Exportar todo</p><p>• Servidor Flask: python3 webapp/app.py</p></div>\`);closeModal()'>📖 Ayuda rápida</a>
+      </div>
+    </div>
+  `);
+}
+
 // ─── SPEEDTEST ──────────────────────────────────────────────────
 
 function showSpeedtest() {
@@ -1952,9 +2014,66 @@ function showTools() {
       <button class="btn btn-outline" onclick="showLocalIP()">Detectar</button>
       <div id="localIPResult" class="text-muted text-sm" style="margin-top:6px"></div>
     </div>
+
+    <div class="section-header" style="margin-top:12px">🔍 WHOIS</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><input type="text" id="whois_query" placeholder="Dominio o IP" value="google.com"></div>
+        <button class="btn" onclick="whoisQuery()">Consultar</button>
+      </div>
+      <div id="whoisResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
+
+    <div class="section-header" style="margin-top:12px">⏰ NTP Time</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <p class="text-sm text-muted mb-8">Verifica la hora de un servidor NTP vs la hora local</p>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><input type="text" id="ntp_host" placeholder="Servidor NTP" value="pool.ntp.org"></div>
+        <button class="btn" onclick="ntpQuery()">Verificar</button>
+      </div>
+      <div id="ntpResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
+
+    <div class="section-header" style="margin-top:12px">🚪 Port Knocking</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <p class="text-sm text-muted mb-8">Envía secuencia de TCP SYN para abrir puertos ocultos</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px"><input type="text" id="knock_host" placeholder="Host"></div>
+        <div style="flex:1;min-width:120px"><input type="text" id="knock_ports" placeholder="Puertos: 7000,8000,9000"></div>
+        <button class="btn" onclick="portKnock()">🔨 Knock</button>
+      </div>
+      <div id="knockResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
+
+    <div class="section-header" style="margin-top:12px">🌐 HTTP Status</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <p class="text-sm text-muted mb-8">Verifica código de estado HTTP de una URL</p>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><input type="text" id="http_status_url" placeholder="URL" value="google.com"></div>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="http_status_follow" checked> Seguir redirects</label>
+        <button class="btn" onclick="httpStatusCheck()">Verificar</button>
+      </div>
+      <div id="httpStatusResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
+
+    <div class="section-header" style="margin-top:12px">📊 Latencia (TCP Ping)</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <p class="text-sm text-muted mb-8">Mide latencia TCP contra puertos comunes (80,443,22,8080)</p>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><input type="text" id="ping_host" placeholder="Host" value="google.com"></div>
+        <button class="btn" onclick="pingLatency()">Medir</button>
+      </div>
+      <div id="pingLatencyResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
+
+    <div class="section-header" style="margin-top:12px">🖥️ DHCP Discover</div>
+    <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
+      <p class="text-sm text-muted mb-8">Envía DHCPDISCOVER broadcast para detectar servidores DHCP en la red</p>
+      <button class="btn" onclick="dhcpDiscover()">🔍 Descubrir DHCP</button>
+      <div id="dhcpResult" class="text-muted text-sm" style="margin-top:6px"></div>
+    </div>
   `;
 }
-
 
 let qrStream = null;
 let qrInterval = null;
@@ -2161,6 +2280,323 @@ async function showLocalIP() {
   } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
 }
 
+// ─── WHOIS ──────────────────────────────────────────────────
+
+async function whoisQuery() {
+  const query = document.getElementById("whois_query").value.trim();
+  if (!query) return;
+  const el = document.getElementById("whoisResult");
+  el.innerHTML = "<span class='text-muted'>Consultando WHOIS...</span>";
+  try {
+    const r = await (await fetch(`/api/tools/whois?query=${encodeURIComponent(query)}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>🔍 ${escapeHtml(r.query)}</strong> · ${r.lines} líneas · servidor: ${escapeHtml(r.server)}</div>
+      <pre style='font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:4px'>${escapeHtml(r.raw)}</pre>
+    </div>`;
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+// ─── NTP ────────────────────────────────────────────────────
+
+async function ntpQuery() {
+  const host = document.getElementById("ntp_host").value.trim() || "pool.ntp.org";
+  const el = document.getElementById("ntpResult");
+  el.innerHTML = "<span class='text-muted'>Consultando NTP...</span>";
+  try {
+    const r = await (await fetch(`/api/tools/ntp?host=${encodeURIComponent(host)}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    const offset = r.offset_seconds;
+    const cls = Math.abs(offset) > 1 ? "danger" : Math.abs(offset) > 0.1 ? "warning" : "success";
+    const sign = offset > 0 ? "🟠 adelantado" : offset < 0 ? "🔵 atrasado" : "🟢 exacto";
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>⏰ ${escapeHtml(r.host)}</strong></div>
+      <div class='text-sm'>NTP: ${escapeHtml(r.ntp_time)}</div>
+      <div class='text-sm'>Local: ${escapeHtml(r.local_time)}</div>
+      <div class='text-sm'>Offset: <span style="color:var(--${cls})">${offset}s</span> (${sign})</div>`;
+    if (r.stratum !== undefined) html += `<div class='text-sm'>Stratum: ${r.stratum}</div>`;
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+// ─── PORT KNOCKING ─────────────────────────────────────────
+
+async function portKnock() {
+  const host = document.getElementById("knock_host").value.trim() || document.getElementById("scan_host").value;
+  const ports = document.getElementById("knock_ports").value.trim();
+  if (!host || !ports) { showToast("Host y puertos requeridos", "error"); return; }
+  const el = document.getElementById("knockResult");
+  el.innerHTML = "<span class='text-muted'>Knockeando...</span>";
+  try {
+    const r = await (await fetch(`/api/tools/port-knock?host=${encodeURIComponent(host)}&ports=${encodeURIComponent(ports)}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>🚪 Secuencia: ${escapeHtml(r.host)}</strong></div>`;
+    r.results.forEach(p => {
+      html += `<div class='cmd-item'><span class='badge badge-accent'>${p.port}</span> <span class='text-xs'>${p.status === "open" ? "🟢 abierto" : "🔵 enviado"}</span></div>`;
+    });
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+// ─── HTTP STATUS ────────────────────────────────────────────
+
+async function httpStatusCheck() {
+  let url = document.getElementById("http_status_url").value.trim();
+  if (!url) return;
+  const follow = document.getElementById("http_status_follow").checked ? "1" : "0";
+  const el = document.getElementById("httpStatusResult");
+  el.innerHTML = "<span class='text-muted'>Verificando...</span>";
+  try {
+    const r = await (await fetch(`/api/tools/http-status?url=${encodeURIComponent(url)}&follow=${follow}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    const statusCls = r.status < 300 ? "success" : r.status < 400 ? "warning" : "danger";
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>${escapeHtml(r.url)}</strong></div>
+      <div class='text-sm'>Estado: <span style="color:var(--${statusCls})">${r.status} ${escapeHtml(r.reason||"")}</span></div>`;
+    if (r.redirected) html += `<div class='text-sm'>Redirect → ${escapeHtml(r.final_url)}</div>`;
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+// ─── PING LATENCY ───────────────────────────────────────────
+
+async function pingLatency() {
+  const host = document.getElementById("ping_host").value.trim();
+  if (!host) return;
+  const el = document.getElementById("pingLatencyResult");
+  el.innerHTML = "<span class='text-muted'>Midiendo latencia TCP...</span>";
+  try {
+    const r = await (await fetch(`/api/tools/ping-latency?host=${encodeURIComponent(host)}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>📊 ${escapeHtml(r.host)}</strong></div>`;
+    if (r.results) {
+      r.results.forEach(p => html += `<div class='cmd-item'><span class='badge badge-accent'>${p.port}</span> <span class='text-xs'>${p.latency_ms} ms</span></div>`);
+    }
+    if (r.latency_ms !== null && r.latency_ms !== undefined) {
+      html += `<div style='margin-top:6px'><span class='badge badge-accent'>Promedio: ${r.latency_ms} ms</span> <span class='badge badge-accent'>Mín: ${r.min_ms} ms</span> <span class='badge badge-accent'>Máx: ${r.max_ms} ms</span></div>`;
+    }
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+
+// ─── WIFI ────────────────────────────────────────────────────
+
+function showWiFi() {
+  document.getElementById("results").innerHTML = `
+    <h3 style='margin-bottom:12px'>📶 Escáner WiFi</h3>
+    <p class='text-sm text-muted mb-8'>Escanea redes WiFi cercanas usando iwlist (Linux) o netsh (Windows)</p>
+    <div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px'>
+      <button class='btn' onclick='wifiScan()'>📶 Escanear</button>
+      <button class='btn btn-outline' onclick='wifiInterfaces()'>🔌 Interfaces</button>
+    </div>
+    <div id='wifiScanResult' class='text-muted text-sm'></div>
+  `;
+}
+
+async function wifiScan() {
+  const el = document.getElementById("wifiScanResult");
+  el.innerHTML = "<span class='text-muted'>Escaneando redes WiFi...</span>";
+  try {
+    const r = await (await fetch("/api/wifi/scan")).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    if (!r.networks || r.count === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron redes</span>"; return; }
+    let html = `<div class='result-box' style='max-height:none'><div class='mb-6'><strong>📶 ${r.count} redes encontradas</strong> (${escapeHtml(r.interface||"")})</div>`;
+    // Ordenar por señal descendente
+    r.networks.sort((a,b) => (b.signal_pct||0) - (a.signal_pct||0));
+    r.networks.forEach(n => {
+      const sig = n.signal_pct !== undefined ? n.signal_pct : 0;
+      const cls = sig >= 70 ? "success" : sig >= 40 ? "warning" : "danger";
+      html += `<div class='cmd-item' style='padding:6px 0'>
+        <span style='flex:1'>
+          <strong>${escapeHtml(n.ssid||"<hidden>")}</strong>
+          <span class='text-xs text-muted' style='margin-left:6px'>${escapeHtml(n.bssid||"")}</span>
+        </span>
+        <span style='display:flex;gap:6px;align-items:center'>
+          <span class='badge badge-${cls}'>${sig}%</span>
+          <span class='text-xs'>CH ${n.channel||"?"}</span>
+          <span class='text-xs'>${escapeHtml(n.wpa||n.standard||"")}</span>
+        </span>
+      </div>`;
+    });
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function wifiInterfaces() {
+  const el = document.getElementById("wifiScanResult");
+  el.innerHTML = "<span class='text-muted'>Obteniendo interfaces...</span>";
+  try {
+    const r = await (await fetch("/api/wifi/interfaces")).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>`;
+    if (r.interfaces) {
+      r.interfaces.forEach(iface => {
+        html += `<div class='cmd-item'>
+          <strong>${escapeHtml(iface.name)}</strong>
+          ${iface.ssid ? `<span class='text-xs'>SSID: ${escapeHtml(iface.ssid)}</span>` : ""}
+          ${iface.mode ? `<span class='text-xs'>Modo: ${iface.mode}</span>` : ""}
+          ${iface.quality ? `<span class='text-xs'>Calidad: ${iface.quality}</span>` : ""}
+        </div>`;
+      });
+    } else if (r.raw) {
+      html += `<pre style='font-size:11px'>${escapeHtml(r.raw)}</pre>`;
+    }
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+
+// ─── BANDWIDTH MONITOR ──────────────────────────────────────
+
+function showBandwidth() {
+  document.getElementById("results").innerHTML = `
+    <h3 style='margin-bottom:12px'>📊 Monitor de Ancho de Banda (SNMP)</h3>
+    <p class='text-sm text-muted mb-8'>Consulta tráfico en tiempo real de interfaces SNMP. Requiere un dispositivo con SNMP habilitado.</p>
+    <div class='input-group'><label>Host</label><input type='text' id='bw_host' placeholder='192.168.1.1'></div>
+    <div class='input-group'><label>Community</label><input type='text' id='bw_community' value='public'></div>
+    <div class='input-group'><label>IF Index</label><input type='number' id='bw_ifindex' value='1' min='1'></div>
+    <div class='input-group'><label>Nombre (opcional)</label><input type='text' id='bw_name' placeholder='WAN, LAN1, etc'></div>
+    <div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>
+      <button class='btn' onclick='bwPoll()'>📊 Poll</button>
+      <button class='btn btn-outline' onclick='bwStartAuto()'>🔄 Auto (5s)</button>
+      <button class='btn btn-outline' onclick='bwStopAuto()'>⏹ Stop</button>
+      <button class='btn btn-outline' onclick='bwHistory()'>📈 Historial</button>
+    </div>
+    <div id='bwResult' class='text-muted text-sm' style='margin-top:10px'></div>
+  `;
+}
+
+let _bwAutoInterval = null;
+
+async function bwPoll() {
+  const host = document.getElementById("bw_host").value;
+  const community = document.getElementById("bw_community").value;
+  const ifindex = parseInt(document.getElementById("bw_ifindex").value) || 1;
+  const name = document.getElementById("bw_name").value || `if${ifindex}`;
+  if (!host) { showToast("Host requerido", "error"); return; }
+  const el = document.getElementById("bwResult");
+  el.innerHTML = "<span class='text-muted'>Consultando SNMP...</span>";
+  try {
+    const r = await (await fetch(`/api/bandwidth/poll?host=${encodeURIComponent(host)}&community=${encodeURIComponent(community)}&ifindex=${ifindex}&name=${encodeURIComponent(name)}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>📊 ${escapeHtml(r.host)} · ${escapeHtml(r.name||`if${r.ifindex}`)}</strong></div>`;
+    if (r.in_bps !== undefined && r.in_bps !== null) {
+      html += `<div class='cmd-item'>⬇ In: <strong>${(r.in_bps/1e6).toFixed(2)} Mbps</strong></div>
+      <div class='cmd-item'>⬆ Out: <strong>${(r.out_bps/1e6).toFixed(2)} Mbps</strong></div>`;
+    } else {
+      html += `<div class='text-sm text-muted'>Esperando segunda muestra...</div>`;
+    }
+    if (r.in_bytes !== null && r.in_bytes !== undefined) {
+      html += `<div class='text-xs text-muted'>Total In: ${(r.in_bytes/1e9).toFixed(2)} GB · Out: ${(r.out_bytes/1e9).toFixed(2)} GB</div>`;
+    }
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+function bwStartAuto() {
+  bwPoll();
+  if (_bwAutoInterval) clearInterval(_bwAutoInterval);
+  _bwAutoInterval = setInterval(() => bwPoll(), 5000);
+  showToast("Auto-poll cada 5s activado", "success");
+}
+
+function bwStopAuto() {
+  if (_bwAutoInterval) { clearInterval(_bwAutoInterval); _bwAutoInterval = null; }
+  showToast("Auto-poll detenido", "info");
+}
+
+async function bwHistory() {
+  const host = document.getElementById("bw_host").value;
+  const ifindex = parseInt(document.getElementById("bw_ifindex").value) || 1;
+  if (!host) return;
+  const el = document.getElementById("bwResult");
+  el.innerHTML = "<span class='text-muted'>Cargando historial...</span>";
+  try {
+    const r = await (await fetch(`/api/bandwidth/traffic?host=${encodeURIComponent(host)}&ifindex=${ifindex}`)).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>📈 ${escapeHtml(r.host)} · ${escapeHtml(r.name)}</strong></div>
+      <div class='cmd-item'>⬇ In: <strong>${r.latest.in_mbps} Mbps</strong></div>
+      <div class='cmd-item'>⬆ Out: <strong>${r.latest.out_mbps} Mbps</strong></div>
+      <div class='text-xs text-muted'>Promedio In: ${r.avg_in_mbps} · Max In: ${r.max_in_mbps} · Prom Out: ${r.avg_out_mbps} · Max Out: ${r.max_out_mbps}</div>`;
+    // Mini gráfico SVG inline
+    if (r.points && r.points.length > 1) {
+      const w = 300, h = 80, pad = 4;
+      const vals = r.points.map(p => Math.max(p.in, p.out));
+      const maxVal = Math.max(...vals, 1);
+      html += `<div style='margin-top:8px'><svg viewBox='0 0 ${w} ${h}' style='width:100%;max-width:${w}px;height:${h}px;background:var(--bg);border-radius:4px'>`;
+      // Grid lines
+      for (let i = 0; i <= 4; i++) {
+        const y = pad + (h - 2*pad) * (1 - i/4);
+        html += `<line x1='${pad}' y1='${y}' x2='${w-pad}' y2='${y}' stroke='rgba(255,255,255,0.05)' stroke-width='1'/>`;
+      }
+      // Data lines
+      const step = (w - 2*pad) / (r.points.length - 1);
+      let inPath = "", outPath = "";
+      r.points.forEach((p, i) => {
+        const x = pad + i * step;
+        const inY = pad + (h - 2*pad) * (1 - p.in / maxVal);
+        const outY = pad + (h - 2*pad) * (1 - p.out / maxVal);
+        inPath += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + inY.toFixed(1);
+        outPath += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + outY.toFixed(1);
+      });
+      html += `<path d='${inPath}' stroke='var(--accent)' stroke-width='2' fill='none' opacity='0.8'/>`;
+      html += `<path d='${outPath}' stroke='var(--accent2)' stroke-width='2' fill='none' opacity='0.8'/>`;
+      html += `</svg>
+        <div class='text-xs text-muted' style='display:flex;justify-content:space-between;max-width:${w}px'>
+          <span>⬇ ${r.latest.in_mbps} Mbps</span>
+          <span>⬆ ${r.latest.out_mbps} Mbps</span>
+        </div></div>`;
+    }
+    html += `<div class='text-xs text-muted' style='margin-top:6px'>${r.points?.length || 0} muestras</div>`;
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
+
+// ─── DHCP ──────────────────────────────────────────────────
+
+async function dhcpDiscover() {
+  const el = document.getElementById("dhcpResult");
+  el.innerHTML = "<span class='text-muted'>Escuchando DHCP offers (3s)...</span>";
+  try {
+    const r = await (await fetch("/api/dhcp/discover")).json();
+    if (r.error) { el.innerHTML = `<span style="color:var(--danger)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+    if (!r.servers || r.count === 0) { el.innerHTML = "<span class='text-muted'>No se detectaron servidores DHCP</span>"; return; }
+    let html = `<div class='result-box' style='max-height:none'>
+      <div class='mb-6'><strong>🖥️ ${r.count} servidor(es) DHCP detectado(s)</strong></div>`;
+    r.servers.forEach(s => {
+      html += `<div class='section' style='margin-top:6px'>
+        <div class='section-header'>🖥️ ${escapeHtml(s.server_id)}</div>
+        <div class='section-body'>
+          <div class='text-sm'>IP Ofrecida: <strong>${escapeHtml(s.offered_ip||"?")}</strong></div>
+          ${s.subnet_mask ? `<div class='text-sm'>Máscara: ${escapeHtml(s.subnet_mask)}</div>` : ""}
+          ${s.router ? `<div class='text-sm'>Gateway: ${escapeHtml(s.router)}</div>` : ""}
+          ${s.dns_servers ? `<div class='text-sm'>DNS: ${escapeHtml(s.dns_servers.join(", "))}</div>` : ""}
+          ${s.domain ? `<div class='text-sm'>Dominio: ${escapeHtml(s.domain)}</div>` : ""}
+          ${s.lease_time_s ? `<div class='text-sm'>Lease: ${s.lease_time_s}s (${(s.lease_time_s/3600).toFixed(1)}h)</div>` : ""}
+          ${s.mac ? `<div class='text-sm'>MAC: ${escapeHtml(s.mac)}</div>` : ""}
+        </div>
+      </div>`;
+    });
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
+}
+
 
 // ─── SNMP ────────────────────────────────────────────────────
 
@@ -2319,6 +2755,7 @@ async function openTopology(id, name = "", preloadData = null) {
       <button class='topo-btn' style='background:#10b981;color:#000' onclick='toggleConnectMode("wireless")'>📡 WiFi</button>
       <button class='topo-btn' style='background:var(--warning);color:#000' onclick='pollNetworkStatus()'>⚡ Live Status</button>
       <button class='topo-btn' style='background:var(--success);color:#000' onclick='switchMode("simulation")'>▶ SIMULADOR</button>
+      <button class='topo-btn' style='background:var(--accent2);color:#000' onclick='scanSubnetToTopology()'>📡 Zenmap Scan</button>
     </div>
     <div id='topologyCanvas'></div>
     
@@ -2398,49 +2835,74 @@ async function openTopology(id, name = "", preloadData = null) {
   initCytoscape(data);
 }
 
+// ─── TOPOLOGY DEVICE ICONS (SVG inline data URIs) ────────────
+
+function _ico(s) { return "data:image/svg+xml," + encodeURIComponent('<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">' + s + '</svg>'); }
+
+const TOPO_ICONS = {
+  router: _ico('<rect x="25" y="35" width="70" height="55" rx="8" fill="none" stroke="white" stroke-width="3"/><rect x="30" y="42" width="60" height="14" rx="3" fill="rgba(255,255,255,.12)"/><circle cx="38" cy="49" r="3" fill="#22c55e"/><circle cx="50" cy="49" r="3" fill="#22c55e"/><circle cx="62" cy="49" r="3" fill="#f59e0b"/><rect x="30" y="60" width="60" height="18" rx="3" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/><rect x="36" y="63" width="10" height="12" rx="2" fill="rgba(255,255,255,.15)"/><rect x="50" y="63" width="10" height="12" rx="2" fill="rgba(255,255,255,.15)"/><rect x="64" y="63" width="10" height="12" rx="2" fill="rgba(255,255,255,.15)"/><rect x="78" y="63" width="10" height="12" rx="2" fill="rgba(255,255,255,.15)"/><line x1="60" y1="20" x2="60" y2="35" stroke="white" stroke-width="3"/><line x1="45" y1="12" x2="45" y2="28" stroke="white" stroke-width="2.5"/><line x1="75" y1="12" x2="75" y2="28" stroke="white" stroke-width="2.5"/><circle cx="60" cy="18" r="5" fill="#ef4444"/>'),
+  switch: _ico('<rect x="10" y="32" width="100" height="56" rx="6" fill="none" stroke="white" stroke-width="3"/><rect x="14" y="38" width="92" height="16" rx="3" fill="rgba(255,255,255,.1)"/><circle cx="24" cy="46" r="3" fill="#22c55e"/><circle cx="36" cy="46" r="3" fill="#22c55e"/><circle cx="48" cy="46" r="3" fill="#22c55e"/><circle cx="60" cy="46" r="3" fill="#22c55e"/><circle cx="72" cy="46" r="3" fill="#f59e0b"/><circle cx="84" cy="46" r="3" fill="#22c55e"/><rect x="14" y="58" width="92" height="22" rx="3" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="2"/><rect x="18" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/><rect x="32" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/><rect x="46" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/><rect x="60" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/><rect x="74" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/><rect x="88" y="61" width="10" height="16" rx="2" fill="rgba(255,255,255,.12)"/>'),
+  firewall: _ico('<rect x="20" y="30" width="80" height="60" rx="10" fill="none" stroke="white" stroke-width="3"/><rect x="26" y="38" width="68" height="14" rx="4" fill="rgba(255,255,255,.1)"/><text x="60" y="49" font-size="11" font-weight="bold" fill="white" text-anchor="middle">FW</text><path d="M60 56 L48 65 L54 80 L66 80 L72 65 Z" fill="none" stroke="white" stroke-width="2.5" opacity=".7"/><line x1="60" y1="60" x2="60" y2="74" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round"/><line x1="54" y1="67" x2="66" y2="67" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round"/><rect x="48" y="92" width="24" height="6" rx="2" fill="rgba(255,255,255,.15)"/>'),
+  server: _ico('<rect x="30" y="10" width="60" height="100" rx="5" fill="none" stroke="white" stroke-width="3"/><rect x="38" y="18" width="36" height="10" rx="3" fill="rgba(255,255,255,.12)"/><circle cx="64" cy="23" r="3" fill="#22c55e"/><rect x="34" y="34" width="44" height="10" rx="3" fill="rgba(255,255,255,.12)"/><rect x="34" y="48" width="44" height="10" rx="3" fill="rgba(255,255,255,.12)"/><rect x="34" y="62" width="44" height="10" rx="3" fill="rgba(255,255,255,.12)"/><rect x="34" y="76" width="44" height="10" rx="3" fill="rgba(255,255,255,.12)"/><rect x="42" y="90" width="36" height="14" rx="3" fill="rgba(255,255,255,.06)"/><line x1="48" y1="97" x2="72" y2="97" stroke="rgba(255,255,255,.3)" stroke-width="2"/>'),
+  pc: _ico('<rect x="22" y="14" width="76" height="54" rx="5" fill="none" stroke="white" stroke-width="3"/><rect x="28" y="20" width="64" height="28" rx="3" fill="rgba(255,255,255,.08)"/><rect x="28" y="52" width="64" height="12" rx="2" fill="rgba(255,255,255,.1)"/><rect x="45" y="68" width="30" height="8" rx="2" fill="rgba(255,255,255,.1)"/><rect x="50" y="76" width="20" height="22" rx="3" fill="none" stroke="white" stroke-width="3"/><rect x="48" y="98" width="24" height="6" rx="2" fill="rgba(255,255,255,.15)"/>'),
+  ap: _ico('<rect x="32" y="36" width="56" height="48" rx="10" fill="none" stroke="white" stroke-width="3"/><rect x="38" y="42" width="44" height="14" rx="4" fill="rgba(255,255,255,.1)"/><circle cx="60" cy="64" r="8" fill="none" stroke="white" stroke-width="2.5"/><circle cx="60" cy="64" r="3" fill="white"/><path d="M26 28 Q60 10 94 28" fill="none" stroke="white" stroke-width="2.5" opacity=".4"/><path d="M18 18 Q60 0 102 18" fill="none" stroke="white" stroke-width="2" opacity=".25"/><rect x="46" y="88" width="28" height="8" rx="3" fill="rgba(255,255,255,.12)"/><rect x="40" y="96" width="40" height="5" rx="2" fill="rgba(255,255,255,.08)"/>'),
+  camera: _ico('<rect x="15" y="32" width="90" height="50" rx="12" fill="none" stroke="white" stroke-width="3"/><rect x="22" y="38" width="76" height="38" rx="8" fill="rgba(255,255,255,.08)"/><circle cx="60" cy="57" r="16" fill="none" stroke="white" stroke-width="3"/><circle cx="60" cy="57" r="7" fill="white" opacity=".5"/><circle cx="60" cy="57" r="3" fill="white"/><rect x="52" y="82" width="16" height="10" rx="2" fill="rgba(255,255,255,.12)"/><rect x="46" y="92" width="28" height="6" rx="2" fill="rgba(255,255,255,.08)"/>'),
+  nvr: _ico('<rect x="18" y="14" width="84" height="72" rx="6" fill="none" stroke="white" stroke-width="3"/><rect x="24" y="22" width="34" height="18" rx="3" fill="rgba(255,255,255,.1)"/><circle cx="30" cy="31" r="2.5" fill="#22c55e"/><rect x="64" y="22" width="32" height="18" rx="3" fill="rgba(255,255,255,.1)"/><circle cx="70" cy="31" r="2.5" fill="#22c55e"/><rect x="24" y="44" width="34" height="18" rx="3" fill="rgba(255,255,255,.1)"/><rect x="64" y="44" width="32" height="18" rx="3" fill="rgba(255,255,255,.1)"/><rect x="24" y="66" width="72" height="14" rx="3" fill="rgba(255,255,255,.05)"/><line x1="30" y1="73" x2="90" y2="73" stroke="rgba(255,255,255,.2)" stroke-width="2"/><rect x="38" y="86" width="44" height="12" rx="2" fill="rgba(255,255,255,.1)"/>'),
+  dvr: _ico('<rect x="18" y="20" width="84" height="64" rx="6" fill="none" stroke="white" stroke-width="3"/><rect x="24" y="28" width="72" height="14" rx="3" fill="rgba(255,255,255,.1)"/><circle cx="34" cy="35" r="2.5" fill="#22c55e"/><circle cx="44" cy="35" r="2.5" fill="#f59e0b"/><rect x="24" y="46" width="72" height="14" rx="3" fill="rgba(255,255,255,.1)"/><rect x="24" y="64" width="72" height="14" rx="3" fill="rgba(255,255,255,.05)"/><line x1="30" y1="71" x2="90" y2="71" stroke="rgba(255,255,255,.15)" stroke-width="2"/><rect x="38" y="84" width="44" height="16" rx="2" fill="rgba(255,255,255:.1)"/>'),
+  cloud: _ico('<path d="M78 48 Q84 28 66 22 Q54 18 44 24 Q34 20 24 28 Q14 26 10 42 Q6 50 10 64 Q14 72 24 72 L88 72 Q100 72 102 58 Q105 44 92 40 Q84 36 78 48 Z" fill="rgba(255,255,255,.06)" stroke="white" stroke-width="3"/><line x1="60" y1="72" x2="60" y2="90" stroke="white" stroke-width="3" opacity=".6"/><path d="M44 86 Q60 96 76 86" fill="none" stroke="white" stroke-width="2.5" opacity=".4"/>'),
+  unknown: _ico('<rect x="30" y="25" width="60" height="60" rx="10" fill="none" stroke="white" stroke-width="3.5"/><circle cx="60" cy="48" r="10" fill="none" stroke="white" stroke-width="3"/><path d="M60 56 L60 72" stroke="white" stroke-width="3.5" stroke-linecap="round"/><line x1="48" y1="84" x2="72" y2="84" stroke="white" stroke-width="3.5" stroke-linecap="round"/>'),
+  generic: _ico('<rect x="30" y="25" width="60" height="60" rx="10" fill="none" stroke="white" stroke-width="3.5"/><circle cx="60" cy="48" r="10" fill="none" stroke="white" stroke-width="3"/><path d="M60 56 L60 72" stroke="white" stroke-width="3.5" stroke-linecap="round"/><line x1="48" y1="84" x2="72" y2="84" stroke="white" stroke-width="3.5" stroke-linecap="round"/>'),
+};
+
+function _topoIcon(type) { return TOPO_ICONS[type] || TOPO_ICONS['generic'] || ''; }
+
 function initCytoscape(data) {
-  currentCy = cytoscape({
+  const cy = cytoscape({
     container: document.getElementById('topologyCanvas'),
-    elements: data.elements || [],
+    elements: data.elements || (data.nodes ? data : []),
     style: [
       {
-        selector: 'node',
+        selector: 'node:not([type="area"])',
         style: {
           'background-color': ele => {
              const status = ele.data('status');
              if(status === 'online') return '#22c55e';
              if(status === 'offline') return '#ef4444';
-             return '#22d3ee';
+             return '#1e293b';
           },
           'label': 'data(label)',
           'color': '#fff',
           'text-valign': 'bottom',
-          'text-margin-y': 5,
-          'font-size': '10px',
-          'width': 45,
-          'height': 45,
-          'background-image': ele => {
-             const type = ele.data('type');
-             if(type === 'router') return 'url(https://img.icons8.com/ios-filled/50/ffffff/router.png)';
-             if(type === 'switch') return 'url(https://img.icons8.com/ios-filled/50/ffffff/switch.png)';
-             if(type === 'firewall') return 'url(https://img.icons8.com/ios-filled/50/ffffff/wall-fire.png)';
-             if(type === 'server') return 'url(https://img.icons8.com/ios-filled/50/ffffff/server.png)';
-             if(type === 'pc') return 'url(https://img.icons8.com/ios-filled/50/ffffff/laptop.png)';
-             if(type === 'ap') return 'url(https://img.icons8.com/ios-filled/50/ffffff/wi-fi--v1.png)';
-             if(type === 'camera') return 'url(https://img.icons8.com/ios-filled/50/ffffff/cctv.png)';
-             if(type === 'nvr' || type === 'dvr') return 'url(https://img.icons8.com/ios-filled/50/ffffff/video-trimming.png)';
-             if(type === 'cloud') return 'url(https://img.icons8.com/ios-filled/50/ffffff/cloud.png)';
-             return '';
-          },
+          'text-margin-y': 8,
+          'font-size': '11px',
+          'font-weight': 'bold',
+          'width': 58,
+          'height': 58,
+          'shape': 'ellipse',
+          'background-image': ele => _topoIcon(ele.data('type')),
           'background-fit': 'contain',
-          'background-image-opacity': 0.8
+          'background-image-opacity': 1,
+          'background-width': '75%',
+          'background-height': '75%',
+          'border-width': 2,
+          'border-color': ele => {
+            const v = (ele.data('vendor') || '').toLowerCase();
+            if(v.includes('cisco')) return '#00bcd4';
+            if(v.includes('mikrotik')) return '#ff5722';
+            if(v.includes('fortinet')) return '#8bc34a';
+            if(v.includes('ubiquiti')) return '#ff9800';
+            if(v.includes('huawei')) return '#e91e63';
+            if(v.includes('hikvision')) return '#2196f3';
+            if(v.includes('dahua')) return '#9c27b0';
+            return '#334155';
+          },
         }
       },
       {
         selector: 'node[type="area"]',
         style: {
-          'shape': 'rectangle',
-          'background-opacity': 0.1,
+          'shape': 'round-rectangle',
+          'background-opacity': 0.08,
           'background-color': '#818cf8',
           'border-width': 2,
           'border-style': 'dashed',
@@ -2450,7 +2912,11 @@ function initCytoscape(data) {
           'text-halign': 'center',
           'background-image': 'none',
           'width': 'auto',
-          'height': 'auto'
+          'height': 'auto',
+          'font-size': '14px',
+          'font-weight': 'bold',
+          'color': '#818cf8',
+          'padding': '20px',
         }
       },
       {
@@ -2481,28 +2947,45 @@ function initCytoscape(data) {
       {
         selector: 'edge',
         style: {
-          'width': 2,
+          'width': ele => {
+             const type = ele.data('type');
+             if(type === 'fiber') return 4;
+             if(type === 'ethernet') return 3;
+             return 2;
+          },
           'line-color': ele => {
+             const type = ele.data('type');
+             if(type === 'fiber') return '#f97316';
+             if(type === 'wireless') return '#10b981';
+             if(type === 'ethernet') return '#4a5568';
+             return '#334155';
+          },
+          'line-style': ele => ele.data('type') === 'wireless' ? 'dotted' : 'solid',
+          'curve-style': 'bezier',
+          'target-arrow-shape': 'triangle-backcurve',
+          'target-arrow-color': ele => {
              const type = ele.data('type');
              if(type === 'fiber') return '#f97316';
              if(type === 'wireless') return '#10b981';
              return '#4a5568';
           },
-          'line-style': ele => ele.data('type') === 'wireless' ? 'dotted' : 'solid',
-          'curve-style': 'bezier',
-          'target-arrow-shape': 'none',
           'label': ele => {
              const s = ele.data('sourcePort') || '';
              const t = ele.data('targetPort') || '';
-             if (s && t) return s + ' ⟷ ' + t;
+             const label = ele.data('label') || '';
+             if (label) return label;
+             if (s && t) return s + ' ↔ ' + t;
              return s || t || '';
           },
-          'font-size': '8px',
-          'color': '#cbd5e0',
+          'font-size': '9px',
+          'color': '#94a3b8',
+          'font-weight': 'bold',
           'text-background-opacity': 1,
           'text-background-color': '#0a0c12',
-          'text-background-padding': '2px',
-          'text-rotation': 'autorotate'
+          'text-background-padding': '3px',
+          'text-background-shape': 'round-rectangle',
+          'text-rotation': 'autorotate',
+          'edge-distances': 'node-position',
         }
       },
       {
@@ -2516,7 +2999,20 @@ function initCytoscape(data) {
         }
       }
     ],
-    layout: { name: 'preset' },
+    layout: {
+      name: (data.elements || data.nodes || []).length > 10 ? 'concentric' : 'breadthfirst',
+      concentric: function(node) {
+        if (node.data('type') === 'cloud') return 0;
+        if (node.data('type') === 'router') return 1;
+        if (node.data('type') === 'firewall') return 2;
+        if (node.data('type') === 'switch') return 3;
+        return 4;
+      },
+      levelWidth: function(nodes) { return 2; },
+      spacingFactor: 1.5,
+      directed: true,
+      nodeDimensionsIncludeLabels: true,
+    },
     userZoomingEnabled: true,
     userPanningEnabled: true,
     boxSelectionEnabled: true,
@@ -2525,6 +3021,8 @@ function initCytoscape(data) {
     desktopTapThreshold: 4,
     autoungrabify: false
   });
+
+  currentCy = cy;
 
   currentCy.on('select', 'node', function(e) {
     selectedNode = e.target;
@@ -2539,6 +3037,18 @@ function initCytoscape(data) {
   currentCy.on('unselect', function() {
     selectedNode = null;
     document.getElementById("nodeInspector").style.display = "none";
+  });
+
+  // Packet Tracer-style: double-click opens device console
+  currentCy.on('tap', 'node', function(e) {
+    // single tap handled below for connection/simulation mode
+  });
+
+  currentCy.on('dblclick', 'node', function(e) {
+    const node = e.target;
+    const d = node.data();
+    if (d.type === 'area') return;
+    openDeviceConsole(d);
   });
 
   // Handle connection mode
@@ -2717,14 +3227,36 @@ async function runAutoDiscover() {
   const depth = parseInt(document.getElementById("auto_depth").value) || 2;
   const el = document.getElementById("autoDiscoverResult");
   if (!seed) { el.innerHTML = "<span style='color:var(--danger)'>IP semilla requerida</span>"; return; }
-  el.innerHTML = "<span class='text-muted'>Descubriendo red (SNMP ARP + LLDP)...</span>";
+  el.innerHTML = "<span class='text-muted'>Descubriendo red (SNMP + TCP scan)...</span>";
   try {
     const r = await (await fetch("/api/topology/discover", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({seed, community, depth})
+      body: JSON.stringify({seed, community, depth, async: true})
     })).json();
+    if (r.task_id) {
+      el.innerHTML = "<span class='text-muted'>Escaneando red... <span id='topoPollDot'>.</span></span>";
+      // Poll
+      const poll = setInterval(async () => {
+        try {
+          const t = await (await fetch("/api/task/" + r.task_id)).json();
+          if (t.status === "running") {
+            const dots = document.getElementById("topoPollDot");
+            if (dots) dots.textContent = dots.textContent.length < 4 ? dots.textContent + "." : ".";
+            return;
+          }
+          clearInterval(poll);
+          if (t.error) { el.innerHTML = `<span style='color:var(--danger)'>${escapeHtml(t.error)}</span>`; return; }
+          const data = t.result || {};
+          if (!data.devices || data.devices.length === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron dispositivos</span>"; return; }
+          el.innerHTML = `<span style='color:var(--success)'>✅ ${data.count} dispositivos encontrados</span>`;
+          closeModal();
+          newTopologyWithData(data);
+        } catch(e) { clearInterval(poll); el.innerHTML = `<span style='color:var(--danger)'>Error: ${escapeHtml(e.message)}</span>`; }
+      }, 1500);
+      return;
+    }
     if (r.error) { el.innerHTML = `<span style='color:var(--danger)'>${escapeHtml(r.error)}</span>`; return; }
-    if (!r.devices || r.devices.length === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron dispositivos vía SNMP</span>"; return; }
+    if (!r.devices || r.devices.length === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron dispositivos</span>"; return; }
     el.innerHTML = `<span style='color:var(--success)'>✅ ${r.count} dispositivos encontrados</span>`;
     closeModal();
     newTopologyWithData(r);
@@ -2761,6 +3293,205 @@ function newTopologyWithData(data) {
   });
   openTopology(null, name, cyData);
 }
+
+// ─── ZENMAP-STYLE: scan subnet + populate topology ─────────
+
+async function scanSubnetToTopology() {
+  const sub = document.getElementById("scan_subnet")?.value || prompt("Subred (ej: 192.168.1.0/24):");
+  if (!sub) return;
+  const el = document.getElementById("topologyList") || document.getElementById("results");
+  el.innerHTML = "<span class='text-muted'>Escaneando subred...</span>";
+
+  try {
+    const hosts = await (await fetch(`/api/scanner/discover?subnet=${encodeURIComponent(sub)}`)).json();
+    if (!hosts.hosts || hosts.hosts.length === 0) {
+      el.innerHTML = "<span class='text-muted'>No se encontraron hosts</span>";
+      showModal(`<button class='modal-close' onclick='closeModal()'>&times;</button><h2>📡 Escaneo de Subred</h2><p class='text-muted'>No se encontraron hosts en ${escapeHtml(sub)}</p>`);
+      return;
+    }
+
+    // Open modal with scan results as topology preview
+    let html = `<button class='modal-close' onclick='closeModal()'>&times;</button>
+      <h2>📡 Topología ${escapeHtml(sub)}</h2>
+      <p class='text-sm text-muted mb-8'>${hosts.hosts.length} hosts encontrados. Creando topología...</p>
+      <div class='result-box' style='max-height:300px;overflow-y:auto'>`;
+
+    const nodes = [];
+    const edges = [];
+    const subnetLabel = sub.replace("/24", "").slice(0, -1) + "0";
+    const areaId = "area_" + Date.now();
+    nodes.push({data: {id: areaId, label: sub, type: "area"}});
+
+    hosts.hosts.forEach((h, i) => {
+      const ip = h.host || h.ip || h;
+      const nodeId = "host_" + i;
+      let type = "pc";
+      const openPorts = h.open_ports || h.ports || [];
+      const os = h.os || "";
+      if (openPorts.some(p => [80,443,8080,8443].includes(p.port || p))) type = "server";
+      if (openPorts.some(p => [23,22].includes(p.port || p))) type = "router";
+      if (openPorts.some(p => [554,8000,37777].includes(p.port || p))) type = "camera";
+      if (openPorts.some(p => [161,162].includes(p.port || p))) type = "switch";
+
+      const portsInfo = openPorts.slice(0, 5).map(p => (p.port || p)).join(",");
+      const label = os ? `${ip}\n${os}` : ip;
+      nodes.push({
+        data: {
+          id: nodeId, label: ip, type, ip,
+          os: os || "",
+          ports: portsInfo,
+          vendor: "",
+          parent: areaId,
+        }
+      });
+      // Connect to area
+      if (i > 0) {
+        edges.push({data: {id: `link_${i}`, source: areaId, target: nodeId}});
+      }
+    });
+
+    hosts.hosts.slice(0, 30).forEach(h => {
+      const ip = h.host || h.ip || h;
+      const os = h.os || "";
+      html += `<div class='cmd-item'><span class='text-xs'>${escapeHtml(ip)}${os ? " · " + escapeHtml(os) : ""}</span></div>`;
+    });
+    html += `</div>
+      <button class='btn' style='margin-top:10px' onclick='closeModal();createTopologyFromScan(${JSON.stringify(hosts.hosts).replace(/"/g, "&quot;")},"${escapeHtml(sub)}")'>➕ Crear Topología</button>`;
+    showModal(html);
+  } catch(e) {
+    el.innerHTML = `<span style='color:var(--danger)'>Error: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function createTopologyFromScan(hosts, subnet) {
+  const name = prompt("Nombre de la topología:", `Subred ${subnet}`);
+  if (!name) return;
+  const nodes = [];
+  const edges = [];
+  const areaId = "area_" + Date.now();
+  nodes.push({data: {id: areaId, label: subnet, type: "area"}});
+
+  hosts.forEach((h, i) => {
+    const ip = h.host || h.ip || h;
+    const nodeId = "host_" + i;
+    let type = "pc";
+    const openPorts = h.open_ports || h.ports || [];
+    const os = h.os || "";
+    if (openPorts.some(p => [80,443,8080,8443].includes(p.port || p))) type = "server";
+    if (openPorts.some(p => [23,22].includes(p.port || p))) type = "router";
+    if (openPorts.some(p => [554,8000,37777].includes(p.port || p))) type = "camera";
+    if (openPorts.some(p => [161,162].includes(p.port || p))) type = "switch";
+    const portsInfo = openPorts.slice(0, 5).map(p => (p.port || p)).join(", ");
+    nodes.push({
+      data: {
+        id: nodeId, label: ip, type, ip,
+        os: os || "",
+        ports: portsInfo,
+        vendor: "",
+        parent: areaId,
+      }
+    });
+  });
+  openTopology(null, name, {
+    name, nodes, edges,
+    elements: [...nodes.map(n => ({group: "nodes", ...n})), ...edges.map(e => ({group: "edges", ...e}))]
+  });
+}
+
+// ─── PACKET TRACER-STYLE DEVICE CONSOLE ────────────────────
+
+function openDeviceConsole(data) {
+  const typeIcons = {router:"🖧",switch:"☲",firewall:"🛡️",server:"🖳",pc:"💻",ap:"📡",camera:"📷",nvr:"📼",dvr:"📼",cloud:"☁️"};
+  const icon = typeIcons[data.type] || "🖥️";
+  showModal(`
+    <button class='modal-close' onclick='closeModal()'>&times;</button>
+    <div style='display:flex;align-items:center;gap:8px;margin-bottom:12px'>
+      <span style='font-size:28px'>${icon}</span>
+      <div>
+        <h2 style='margin:0'>${escapeHtml(data.label || data.id)}</h2>
+        <div class='text-xs text-muted'>${escapeHtml(data.type)} ${data.ip ? "· " + escapeHtml(data.ip) : ""} ${data.vendor ? "· " + escapeHtml(data.vendor) : ""}</div>
+      </div>
+    </div>
+    <div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px'>
+      ${data.os ? `<div class='section'><div class='section-header'>💿 SO</div><div class='section-body text-sm'>${escapeHtml(data.os)}</div></div>` : ""}
+      ${data.ports ? `<div class='section'><div class='section-header'>🔌 Puertos</div><div class='section-body text-sm'>${escapeHtml(data.ports)}</div></div>` : ""}
+      ${data.vendor ? `<div class='section'><div class='section-header'>🏭 Fabricante</div><div class='section-body text-sm'>${escapeHtml(data.vendor)}</div></div>` : ""}
+      ${data.model ? `<div class='section'><div class='section-header'>📋 Modelo</div><div class='section-body text-sm'>${escapeHtml(data.model)}</div></div>` : ""}
+    </div>
+    <div class='section'>
+      <div class='section-header'>🖥️ Consola (simulada)</div>
+      <div class='section-body'>
+        <div id='deviceConsole' style='background:#000;padding:8px;border-radius:4px;font-family:monospace;font-size:11px;min-height:80px;max-height:150px;overflow-y:auto;color:#0f0'>
+          > ${escapeHtml(data.label || data.id)}# <span class='text-muted' style='color:#555'>Sistema iniciado. ${data.os ? "SO: " + escapeHtml(data.os) : "Sin SO detectado"}</span>
+          <br>> ${data.ip ? "IP: " + escapeHtml(data.ip) : "Sin IP configurada"}
+          <br>> ${data.vendor ? "Vendor: " + escapeHtml(data.vendor) : "Vendor genérico"}
+          <br>> <span style='color:var(--accent)'>show interfaces</span>
+          <br>> ${data.type === "router" ? "GigabitEthernet0/0: up, IP: " + escapeHtml(data.ip || "N/A") : ""}
+          ${data.type === "switch" ? "FastEthernet0/1-24: up" : ""}
+          ${data.type === "camera" ? "Video stream: active, codec: H.265" : ""}
+          ${data.type === "server" ? "Servicios: HTTP" + (data.ports?.includes("443") ? "S" : "") + ", SSH" : ""}
+          ${data.type === "firewall" ? "Políticas activas: 12, Conexiones: 145" : ""}
+          <br>> <span style='color:#555'>--- Sesión interactiva simulada ---</span>
+        </div>
+        <div style='display:flex;gap:4px;margin-top:6px'>
+          <button class='btn btn-xs btn-outline' onclick='topoPingFromConsole("${escapeHtml(data.ip || data.id)}")'>📡 Ping</button>
+          <button class='btn btn-xs btn-outline' onclick='topoScanFromConsole("${escapeHtml(data.ip || data.id)}")'>🔍 Quick Scan</button>
+          <button class='btn btn-xs btn-outline' onclick='topoTelnetConsole("${escapeHtml(data.ip || data.id)}")'>💻 Telnet</button>
+          <button class='btn btn-xs' onclick="document.getElementById('deviceConsole').innerHTML+='<br>> <span style=\\'color:#555\\'>Comando no disponible en modo simulación</span>'">⏎ Enter</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+async function topoPingFromConsole(host) {
+  const console = document.getElementById("deviceConsole");
+  if (!console) return;
+  console.innerHTML += `<br>> ping ${escapeHtml(host)} <span class='text-muted' style='color:#555'>... consultando</span>`;
+  try {
+    const r = await (await fetch(`/api/scanner/ping?host=${encodeURIComponent(host)}&async=false`)).json();
+    if (r.alive || r.reachable) {
+      console.innerHTML += `<br>> <span style='color:var(--success)'>✅ Respuesta de ${escapeHtml(host)} (${r.latency_ms || "?"} ms)</span>`;
+    } else {
+      console.innerHTML += `<br>> <span style='color:var(--danger)'>❌ Sin respuesta de ${escapeHtml(host)}</span>`;
+    }
+  } catch(e) {
+    console.innerHTML += `<br>> <span style='color:var(--danger)'>Error: ${escapeHtml(e.message)}</span>`;
+  }
+  console.scrollTop = console.scrollHeight;
+}
+
+async function topoScanFromConsole(host) {
+  const console = document.getElementById("deviceConsole");
+  if (!console) return;
+  console.innerHTML += `<br>> nmap -F ${escapeHtml(host)} <span style='color:#555'>escaneando...</span>`;
+  try {
+    const r = await (await fetch(`/api/scanner/quick-scan?host=${encodeURIComponent(host)}&async=false`)).json();
+    const ports = r.ports || r.results || [];
+    if (ports.length) {
+      console.innerHTML += `<br>> <span style='color:var(--success)'>✅ ${ports.length} puertos abiertos:</span>`;
+      ports.slice(0, 10).forEach(p => {
+        console.innerHTML += `<br>>   ${p.port || p}/${p.protocol || "tcp"}  ${escapeHtml(p.service || p.name || "")}`;
+      });
+    } else {
+      console.innerHTML += `<br>> <span class='text-muted'>Sin puertos abiertos</span>`;
+    }
+  } catch(e) {
+    console.innerHTML += `<br>> <span style='color:var(--danger)'>Error: ${escapeHtml(e.message)}</span>`;
+  }
+  console.scrollTop = console.scrollHeight;
+}
+
+function topoTelnetConsole(host) {
+  const console = document.getElementById("deviceConsole");
+  if (!console) return;
+  console.innerHTML += `<br>> telnet ${escapeHtml(host)}<br>> <span style='color:var(--accent)'>Conectando a ${escapeHtml(host)}:23...</span>`;
+  setTimeout(() => {
+    console.innerHTML += `<br>> <span style='color:var(--warning)'>⚠️ Telnet no soportado en web. Usá: telnet ${escapeHtml(host)} desde tu terminal</span>`;
+    console.scrollTop = console.scrollHeight;
+  }, 500);
+}
+
 
 function switchMode(mode) {
   const isSim = mode === 'simulation';
@@ -3513,5 +4244,233 @@ function showHistory() {
   if (hist.length > 20) html += `<div class='text-xs text-muted' style='margin-top:6px'>... y ${hist.length - 20} más</div>`;
   html += `<button class='btn btn-sm btn-outline' style='margin-top:8px;color:var(--danger)' onclick='localStorage.removeItem("techbot_history");closeModal()'>🗑️ Limpiar historial</button>`;
   showModal(html);
+}
+
+// ─── DATA EXPORT / IMPORT ──────────────────────────────────
+
+function exportAllData() {
+  const data = {};
+  const keys = ["techbot_notes", "techbot_favs", "techbot_history",
+    "techbot_theme", "techbot_compact", "techbot_topology_saved",
+    "techbot_ipam_subnets", "techbot_ipam_hosts"];
+  keys.forEach(k => {
+    const val = localStorage.getItem(k);
+    if (val) data[k] = JSON.parse(val);
+  });
+  data._exported_at = new Date().toISOString();
+  data._version = "1.0";
+  exportJSON(data, "techbot_backup.json");
+  showToast("✅ Backup exportado", "success");
+}
+
+function importAllData() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.onchange = async (e) => {
+    try {
+      const text = await e.target.files[0].text();
+      const data = JSON.parse(text);
+      let count = 0;
+      Object.entries(data).forEach(([k, v]) => {
+        if (k.startsWith("techbot_") || k.startsWith("_")) {
+          localStorage.setItem(k, JSON.stringify(v));
+          count++;
+        }
+      });
+      showToast(`✅ ${count} datos importados. Recargá la página.`, "success");
+      setTimeout(() => location.reload(), 1500);
+    } catch(err) {
+      showToast("❌ Error al importar: " + err.message, "error");
+    }
+  };
+  input.click();
+}
+
+// ─── NETWORK AUDIT REPORT ──────────────────────────────────
+
+async function generateReport() {
+  const host = document.getElementById("scan_host")?.value || prompt("IP del dispositivo a auditar:");
+  if (!host) return;
+  const el = document.getElementById("results");
+  el.innerHTML = "<span class='text-muted'>Generando informe de auditoría...</span>";
+
+  try {
+    const [ping, ports, cctv] = await Promise.all([
+      fetch(`/api/scanner/ping?host=${encodeURIComponent(host)}&async=false`).then(r => r.json()),
+      fetch(`/api/scanner/quick-scan?host=${encodeURIComponent(host)}&async=false`).then(r => r.json()),
+      fetch(`/api/scanner/scan-cctv?host=${encodeURIComponent(host)}`).then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const now = new Date().toLocaleString();
+    const title = `Informe de Auditoría - ${host}`;
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap'>
+        <div><h3 style='margin:0'>📋 ${title}</h3>
+        <div class='text-xs text-muted'>Generado: ${now}</div></div>
+        <div style='display:flex;gap:4px'>
+          <button class='btn btn-xs btn-outline' onclick='window.print()'>🖨️ Imprimir</button>
+          <button class='btn btn-xs btn-outline' onclick='exportJSON(${JSON.stringify({host, ping, ports, cctv, generated: now})},"audit_${host}.json")'>📥 JSON</button>
+        </div>
+      </div>
+      <hr style='border-color:var(--border);margin:10px 0'>`;
+
+    // Estado del host
+    const alive = ping.alive || ping.reachable;
+    html += `<div class='section' style='margin-top:8px'>
+      <div class='section-header'>🖥️ Estado del Host</div>
+      <div class='section-body'>
+        <div class='text-sm'>IP: <strong>${escapeHtml(host)}</strong></div>
+        <div class='text-sm'>Estado: <span style='color:var(--${alive ? "success" : "danger"})'>${alive ? "✅ Activo" : "❌ Sin respuesta"}</span></div>
+        ${ping.os ? `<div class='text-sm'>OS: ${escapeHtml(ping.os)}</div>` : ""}
+        ${ping.ttl !== undefined ? `<div class='text-sm'>TTL: ${ping.ttl}</div>` : ""}
+        ${ping.latency_ms ? `<div class='text-sm'>Latencia: ${ping.latency_ms} ms</div>` : ""}
+      </div>
+    </div>`;
+
+    // Puertos abiertos
+    const portList = ports.ports || ports.results || [];
+    html += `<div class='section' style='margin-top:8px'>
+      <div class='section-header'>🔌 Puertos Abiertos (${portList.length})</div>
+      <div class='section-body'>`;
+    if (portList.length) {
+      html += "<table style='width:100%;font-size:12px;border-collapse:collapse'>";
+      html += "<tr style='color:var(--text2)'><th style='text-align:left;padding:4px'>Puerto</th><th style='text-align:left'>Servicio</th><th style='text-align:left'>Estado</th></tr>";
+      portList.forEach(p => {
+        const port = p.port || p;
+        const svc = p.service || p.name || "";
+        html += `<tr style='border-top:1px solid var(--border)'><td style='padding:4px'><strong>${port}</strong></td><td>${escapeHtml(svc)}</td><td style='color:var(--success)'>✅ Abierto</td></tr>`;
+      });
+      html += "</table>";
+    } else {
+      html += "<div class='text-muted text-sm'>Sin puertos abiertos detectados</div>";
+    }
+    html += "</div></div>";
+
+    // CCTV
+    if (cctv.device_identity) {
+      html += `<div class='section' style='margin-top:8px'>
+        <div class='section-header'>📷 Dispositivos CCTV</div>
+        <div class='section-body'>`;
+      Object.entries(cctv.device_identity).forEach(([port, vendor]) => {
+        html += `<div class='text-sm'>Puerto ${port}: ${escapeHtml(vendor)}</div>`;
+      });
+      html += "</div></div>";
+    }
+
+    // Resumen de seguridad
+    const criticalPorts = portList.filter(p => [23, 21, 135, 445, 3389].includes(p.port || p));
+    if (criticalPorts.length) {
+      html += `<div class='section' style='margin-top:8px'>
+        <div class='section-header' style='color:var(--danger)'>⚠️ Hallazgos de Seguridad</div>
+        <div class='section-body'>
+          <div class='text-sm' style='color:var(--danger)'>Puertos críticos expuestos: ${criticalPorts.map(p => p.port || p).join(", ")}</div>
+        </div>
+      </div>`;
+    }
+
+    html += `<hr style='border-color:var(--border);margin:12px 0'>
+      <div class='text-xs text-muted'>TechBot Auditoría · ${now}</div>
+    </div>`;
+
+    el.innerHTML = html;
+    addResultToHistory("audit", {host});
+    showToast("✅ Informe generado", "success");
+  } catch(e) {
+    el.innerHTML = `<span style='color:var(--danger)'>Error generando informe: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+// ─── REST API CLIENT ────────────────────────────────────────
+
+function showAPIClient() {
+  const el = document.getElementById("results");
+  el.innerHTML = `
+    <h3 style='margin-bottom:12px'>🌐 Cliente REST API</h3>
+    <p class='text-sm text-muted mb-8'>Probá endpoints HTTP directamente desde TechBot</p>
+    <div style='display:flex;gap:6px;flex-wrap:wrap'>
+      <select id='api_method' style='width:80px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px'>
+        <option value='GET'>GET</option>
+        <option value='POST'>POST</option>
+        <option value='PUT'>PUT</option>
+        <option value='DELETE'>DELETE</option>
+        <option value='PATCH'>PATCH</option>
+      </select>
+      <div style='flex:2;min-width:200px'><input type='text' id='api_url' placeholder='https://api.ejemplo.com/endpoint'></div>
+      <button class='btn' onclick='apiRequest()'>Enviar</button>
+    </div>
+    <div style='margin-top:6px'>
+      <textarea id='api_body' placeholder='Body (JSON) para POST/PUT/PATCH' style='width:100%;height:60px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px;font-size:12px;resize:vertical'></textarea>
+    </div>
+    <div style='display:flex;gap:6px;margin-top:6px'>
+      <label style='font-size:12px;display:flex;align-items:center;gap:4px'><input type='text' id='api_header_key' placeholder='Header Key' style='width:100px;padding:4px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px'></label>
+      <label style='font-size:12px;display:flex;align-items:center;gap:4px'><input type='text' id='api_header_val' placeholder='Header Value' style='width:150px;padding:4px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px'></label>
+      <button class='btn btn-xs btn-outline' onclick='apiAddHeader()'>+ Header</button>
+    </div>
+    <div id='api_headers_list' class='text-xs' style='margin-top:4px'></div>
+    <div id='apiResult' class='text-muted text-sm' style='margin-top:8px'></div>
+  `;
+}
+
+let _apiHeaders = [];
+
+function apiAddHeader() {
+  const k = document.getElementById("api_header_key").value.trim();
+  const v = document.getElementById("api_header_val").value.trim();
+  if (!k) return;
+  _apiHeaders.push({key: k, value: v});
+  document.getElementById("api_header_key").value = "";
+  document.getElementById("api_header_val").value = "";
+  const el = document.getElementById("api_headers_list");
+  el.innerHTML = _apiHeaders.map(h => `<span class='badge badge-accent'>${escapeHtml(h.key)}: ${escapeHtml(h.value)} <span style='cursor:pointer;color:var(--danger)' onclick='_apiHeaders=_apiHeaders.filter(x=>x.key!=="${escapeHtml(h.key)}");apiAddHeader()'>✕</span></span>`).join(" ");
+}
+
+async function apiRequest() {
+  const method = document.getElementById("api_method").value;
+  const url = document.getElementById("api_url").value.trim();
+  if (!url) { showToast("URL requerida", "error"); return; }
+  const el = document.getElementById("apiResult");
+  el.innerHTML = "<span class='text-muted'>Enviando...</span>";
+  try {
+    const headers = {"Content-Type": "application/json"};
+    _apiHeaders.forEach(h => headers[h.key] = h.value);
+    const opts = {method, headers};
+    if (["POST", "PUT", "PATCH"].includes(method)) {
+      const body = document.getElementById("api_body").value.trim();
+      if (body) opts.body = body;
+    }
+    const start = performance.now();
+    const resp = await fetch(url, opts);
+    const elapsed = Math.round(performance.now() - start);
+    const contentType = resp.headers.get("content-type") || "";
+    let bodyText;
+    try { bodyText = await resp.text(); } catch { bodyText = "(no body)"; }
+    let bodyHtml;
+    try {
+      const pretty = JSON.stringify(JSON.parse(bodyText), null, 2);
+      bodyHtml = `<pre style='font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:4px;margin-top:4px'>${escapeHtml(pretty.slice(0, 3000))}</pre>`;
+    } catch {
+      bodyHtml = `<pre style='font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:4px;margin-top:4px'>${escapeHtml(bodyText.slice(0, 2000))}</pre>`;
+    }
+    const statusCls = resp.status < 300 ? "success" : resp.status < 500 ? "warning" : "danger";
+    let html = `<div class='result-box' style='max-height:none'>
+      <div style='display:flex;justify-content:space-between;align-items:center'>
+        <span><strong>${method}</strong> <span class='text-sm'>${escapeHtml(resp.url)}</span></span>
+        <span style='color:var(--${statusCls})'>${resp.status} ${resp.statusText}</span>
+        <span class='text-xs text-muted'>${elapsed}ms</span>
+      </div>`;
+    // Headers
+    html += `<div style='margin-top:6px'><span class='text-xs' onclick='this.nextElementSibling.style.display=this.nextElementSibling.style.display==="none"?"block":"none"' style='cursor:pointer;color:var(--accent)'>📋 Headers</span>
+      <div style='display:none;margin-top:4px;font-size:11px'>`;
+    resp.headers.forEach((v, k) => {
+      html += `<div><span class='badge badge-accent' style='font-size:9px'>${escapeHtml(k)}</span> ${escapeHtml(v.slice(0, 80))}</div>`;
+    });
+    html += `</div></div>`;
+    html += bodyHtml;
+    html += "</div>";
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`;
+  }
 }
 

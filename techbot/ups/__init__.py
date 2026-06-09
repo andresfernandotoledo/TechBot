@@ -513,7 +513,15 @@ def _run_cmd(cmd, timeout=10):
 
 def _snmp_get_v2c(host, oid, community="public"):
     o, e, c = _run_cmd(["snmpget", "-v2c", "-c", community, "-Ovq", host, oid], 8)
-    return o.strip() if c == 0 else None
+    if c == 0:
+        return o.strip()
+    # Fallback a pure-Python SNMP
+    try:
+        from techbot.snmp import snmp_get
+        val = snmp_get(host, community, oid)
+        return str(val) if val is not None else None
+    except:
+        return None
 
 
 def _snmp_get_v3(host, oid, user="", auth_proto="SHA", auth_pass="", priv_proto="AES", priv_pass=""):
@@ -529,18 +537,23 @@ def _snmp_get_v3(host, oid, user="", auth_proto="SHA", auth_pass="", priv_proto=
 
 def _snmp_walk_v2c(host, oid, community="public"):
     o, e, c = _run_cmd(["snmpwalk", "-v2c", "-c", community, "-Ovq", host, oid], 15)
-    if c != 0:
+    if c == 0 and o.strip():
+        result = {}
+        for line in o.strip().split("\n"):
+            if not line:
+                continue
+            if " = " in line:
+                k, v = line.split(" = ", 1)
+                result[k.strip()] = v.strip()
+            else:
+                result[line.strip()] = ""
+        return result
+    # Fallback a pure-Python SNMP
+    try:
+        from techbot.snmp import snmp_walk
+        return snmp_walk(host, community, oid)
+    except:
         return {}
-    result = {}
-    for line in o.strip().split("\n"):
-        if not line:
-            continue
-        if " = " in line:
-            k, v = line.split(" = ", 1)
-            result[k.strip()] = v.strip()
-        else:
-            result[line] = ""
-    return result
 
 
 def _snmpwalk_v3(host, oid, user="", auth_proto="SHA", auth_pass="", priv_proto="AES", priv_pass=""):
@@ -568,48 +581,106 @@ def _snmpwalk_v3(host, oid, user="", auth_proto="SHA", auth_pass="", priv_proto=
 # ─── CLASE NUT AVANZADA ──────────────────────────────────────
 
 class NUTClient:
+    """Cliente NUT vía TCP (puerto 3493) sin binarios externos."""
+
     def __init__(self, ups_name="", host="localhost", port=3493):
         self.ups_name = ups_name
         self.host = host
         self.port = port
 
-    def _dest(self, ups=""):
-        u = ups or self.ups_name
-        if not u:
+    def _connect(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(5)
+            s.connect((self.host, self.port))
+            return s
+        except:
+            return None
+
+    def _cmd(self, s, cmd):
+        try:
+            s.sendall((cmd + "\n").encode())
+            chunks = []
+            while True:
+                data = s.recv(4096)
+                if not data:
+                    break
+                chunks.append(data)
+                if b"\n" in data:
+                    line = data.split(b"\n")[0]
+                    if line.startswith(b"ERR") or line.startswith(b"OK"):
+                        break
+                    if b"END " in data:
+                        break
+            return b"".join(chunks).decode(errors="replace")
+        except:
             return ""
-        if self.host != "localhost":
-            return f"{u}@{self.host}:{self.port}"
-        return u
 
     def is_available(self):
+        s = self._connect()
+        if s:
+            s.close()
+            return True
+        # Fallback a upsc
         return _run_cmd(["upsc", "-l"], 5)[2] == 0
 
     def list_ups(self):
+        s = self._connect()
+        if s:
+            resp = self._cmd(s, "LIST UPS")
+            s.close()
+            ups_list = []
+            for line in resp.split("\n"):
+                if line.startswith("UPS "):
+                    parts = line.split(" ", 2)
+                    if len(parts) >= 2:
+                        ups_list.append(parts[1].strip('"'))
+            if ups_list:
+                return ups_list
+        # Fallback a upsc
         o, e, c = _run_cmd(["upsc", "-l"], 5)
         return [u.strip() for u in o.split("\n") if u.strip()] if c == 0 else []
 
     def get_status(self, ups=""):
-        dest = self._dest(ups)
-        if not dest:
+        u = ups or self.ups_name
+        s = self._connect()
+        if s and u:
+            resp = self._cmd(s, f"LIST VAR {u}")
+            s.close()
+            result = {}
+            for line in resp.split("\n"):
+                if line.startswith("VAR "):
+                    parts = line.split(" ", 2)
+                    if len(parts) == 3:
+                        var_val = parts[2]
+                        if " " in var_val:
+                            var_name, var_value = var_val.split(" ", 1)
+                            result[var_name] = var_value.strip('"')
+            if result:
+                return result
+        # Fallback a upsc
+        if not u:
             return {}
+        dest = f"{u}@{self.host}:{self.port}" if self.host != "localhost" else u
         o, e, c = _run_cmd(["upsc", dest], 10)
-        if c != 0:
-            return {}
-        result = {}
-        for line in o.strip().split("\n"):
-            if ":" in line:
-                k, v = line.split(":", 1)
-                result[k.strip()] = v.strip()
-        return result
+        if c == 0:
+            result = {}
+            for line in o.strip().split("\n"):
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    result[k.strip()] = v.strip()
+            return result
+        return {}
 
     def run_command(self, command, ups=""):
-        dest = self._dest(ups)
+        u = ups or self.ups_name
+        dest = f"{u}@{self.host}:{self.port}" if self.host != "localhost" else u
         if not dest:
             return {"error": "UPS no especificado"}
         o, e, c = _run_cmd(["upscmd", dest, command], 15)
         if c == 0:
             return {"status": "ok", "command": command, "output": o.strip()}
-        return {"error": e.strip() or "comando falló"}
+        return {"error": e.strip() or "comando falló, requiere upscmd instalado"}
 
     def test_battery_quick(self, ups=""):
         return self.run_command("test.battery.start.quick", ups)

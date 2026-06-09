@@ -4,9 +4,7 @@ import struct
 import os
 import sys
 import concurrent.futures
-import subprocess
 import time
-import re
 
 # ─── BASE DE DATOS DE PUERTOS ─────────────────────────────────
 SERVICE_PORTS = {
@@ -175,34 +173,6 @@ def ping_host(host, timeout=2):
                 return {"alive": True, "host": str(host), "latency": round((end-start)*1000, 2), "ttl": -1, "port": port, "method": "tcp"}
         except:
             pass
-    # Fallback ICMP si el binario está disponible
-    is_win = os.name == "nt"
-    ping_paths = ["ping.exe"] if is_win else ["/usr/bin/ping", "/bin/ping", "/system/bin/ping", "/data/data/com.termux/files/usr/bin/ping"]
-    ping_bin = None
-    for p in ping_paths:
-        if is_win or os.path.exists(p):
-            ping_bin = p
-            break
-    if ping_bin:
-        try:
-            param = "-n" if is_win else "-c"
-            w_flag = "-w" if is_win else "-W"
-            # Windows timeout en ms, Linux en segundos
-            win_timeout = str(int(timeout * 1000))
-            nix_timeout = str(timeout)
-            cmd = [ping_bin, param, "1", w_flag, (win_timeout if is_win else nix_timeout), str(host)]
-            if not is_win:
-                cmd.insert(2, "-4")  # forzar IPv4 en Linux
-            start = time.time()
-            result = subprocess.run(cmd, capture_output=True, timeout=timeout+2)
-            end = time.time()
-            if result.returncode == 0:
-                ttl = -1
-                match = re.search(r"ttl=(\d+)", result.stdout.decode(), re.IGNORECASE)
-                if match: ttl = int(match.group(1))
-                return {"alive": True, "host": str(host), "latency": round((end-start)*1000, 2), "ttl": ttl, "port": None, "method": "icmp"}
-        except:
-            pass
     return {"alive": False, "host": str(host), "latency": 0, "ttl": -1, "port": None, "method": None}
 
 def discover_hosts(subnet, timeout=1.5, max_threads=100):
@@ -233,21 +203,33 @@ def os_detection(host, timeout=2):
     elif 128 < ttl <= 255: guess = "Cisco / Router / Network"
     return f"{guess} (TTL={ttl})"
 
-def traceroute(host, max_hops=15, timeout=1.5):
-    """Traceroute."""
+def traceroute(host, max_hops=15, timeout=1.5, port=80):
+    """Traceroute TCP puro (sin bins externos)."""
     results = []
+    dest = str(host)
     for ttl in range(1, max_hops + 1):
         try:
-            param = "-n" if os.name == "nt" else "-c"
-            ttl_f = "-i" if os.name == "nt" else "-t"
-            cmd = ["ping", param, "1", ttl_f, str(ttl), "-W", "1000", str(host)]
-            proc = subprocess.run(cmd, capture_output=True, timeout=timeout+1)
-            ip = "*"
-            m = re.search(r"(\d+\.\d+\.\d+\.\d+)", proc.stdout.decode())
-            if m: ip = m.group(1)
-            results.append({"hop": ttl, "ip": ip})
-            if ip == str(host): break
-        except: results.append({"hop": ttl, "ip": "*"})
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+            start = time.time()
+            err = s.connect_ex((dest, port))
+            elapsed = round((time.time() - start) * 1000, 1)
+            if err == 0:
+                results.append({"hop": ttl, "ip": dest, "latency": elapsed})
+                s.close()
+                break
+            elif err == 111 or err == 10061:
+                results.append({"hop": ttl, "ip": dest, "latency": elapsed})
+                s.close()
+                break
+            else:
+                results.append({"hop": ttl, "ip": "*"})
+            s.close()
+        except socket.timeout:
+            results.append({"hop": ttl, "ip": "*"})
+        except:
+            results.append({"hop": ttl, "ip": "*"})
     return results
 
 # ─── FUNCIONES ESPECIALIZADAS PARA CCTV/AC ─────────────────────

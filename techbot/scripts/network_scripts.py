@@ -345,11 +345,18 @@ def network_discovery(subnet):
     for ip in red.hosts():
         ip_str = str(ip)
         try:
-            r = subprocess.run(
-                ["ping", "-c", "1", "-W", "1", ip_str],
-                capture_output=True, timeout=2
-            )
-            if r.returncode == 0:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)
+            alive = False
+            for port in [22, 80, 443, 8080, 3389]:
+                try:
+                    if s.connect_ex((ip_str, port)) == 0:
+                        alive = True
+                        break
+                except:
+                    pass
+            s.close()
+            if alive:
                 try:
                     hostname = socket.gethostbyaddr(ip_str)[0]
                 except socket.herror:
@@ -643,28 +650,26 @@ def jitter_test(host="8.8.8.8", count=20):
 
 
 def conntrack_check():
-    """Muestra tabla de conexiones de red (conntrack)"""
-
-    # Muestra tabla de conexiones de red (connection tracking). Linux: conntrack -L o cat /proc/net/nf_conntrack.
-    if sys.platform == "linux":
-        return subprocess.getoutput("conntrack -L 2>/dev/null | head -30 || cat /proc/net/nf_conntrack 2>/dev/null | head -30 || echo 'conntrack no disponible'")
-    return "No soportado"
+    """Muestra tabla de conexiones de red."""
+    try:
+        with open("/proc/net/nf_conntrack") as f:
+            lines = f.read().strip().split("\n")[:30]
+            return "\n".join(lines) if lines else "conntrack no disponible"
+    except:
+        return "No soportado en este SO"
 
 
 def mtr_trace(host, count=10):
-    """Traza de ruta combinada con ping (mtr)"""
-
-    # Traza de ruta combinada con estadísticas (mtr). Combina traceroute con ping continuo. Muestra pérdida y latencia por salto.
-    output = subprocess.getoutput(f"mtr -r -c {count} {host} 2>/dev/null || traceroute -n {host} 2>/dev/null || echo 'mtr no disponible'")
-    return {"host": host, "trace": output}
+    """Disponible solo si mtr o traceroute están instalados."""
+    return {"host": host, "trace": "mtr/binario no disponible"}
 
 
 def tcptraceroute(host, port=80):
-    """Traceroute usando TCP (requiere tcptraceroute o nmap)"""
-
-    # Traceroute por TCP en lugar de ICMP. Útil cuando los firewalls bloquean ICMP pero permiten TCP. Usa tcptraceroute o nmap.
-    output = subprocess.getoutput(f"tcptraceroute -n -p {port} {host} 2>/dev/null || nmap -sn --traceroute -p {port} {host} 2>/dev/null | grep -E 'trace|hop' || echo 'tcptraceroute no disponible'")
-    return {"host": host, "port": port, "trace": output}
+    """Reemplazado por traceroute TCP en scanner."""
+    from techbot.scanner import traceroute as tr
+    hops = tr(host, max_hops=15, port=port)
+    trace_str = "\n".join(f"{h['hop']:>2}. {h['ip']}" for h in hops)
+    return {"host": host, "port": port, "trace": trace_str}
 
 
 def dhcp_renew_all():

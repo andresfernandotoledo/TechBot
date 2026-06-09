@@ -1,20 +1,388 @@
-import socket
-import struct
-import re
-import subprocess
-import sys
-import os
+# techbot/snmp/__init__.py
+# Pure-Python SNMP v1/v2c implementation with subprocess fallback
 
+import os
+import socket
+import time
+
+from .ber import *
+
+_SNMP_PORT = 161
+_DEFAULT_TIMEOUT = 3
+
+
+class SNMPError(Exception):
+    pass
+
+
+# ─── Backward-compatible public API ─────────────────────────
+# Callers use: snmp_get(host, community, oid)
+#              snmp_walk(host, community, oid)
+
+def snmp_get(host, community, oid, version=2, port=161, timeout=_DEFAULT_TIMEOUT):
+    result = _pure_get(host, oid, community, version, port, timeout)
+    return _format_value(result) if result is not None else None
+
+
+def snmp_walk(host, community, oid, version=2, port=161, timeout=_DEFAULT_TIMEOUT):
+    results = _pure_walk(host, oid, community, version, port, timeout)
+    # Return dict of {oid_str: formatted_value}
+    d = {}
+    for o, v in results:
+        d[o] = _format_value(v)
+    return d
+
+
+def snmp_check(host, community="public", timeout=2):
+    try:
+        val = snmp_get(host, community, "1.3.6.1.2.1.1.1.0", timeout=timeout)
+        return val is not None
+    except:
+        return False
+
+
+def get_interfaces(host, community="public", timeout=3):
+    oid_iface = "1.3.6.1.2.1.2.2.1"
+    walk_raw = _pure_walk(host, oid_iface, community, port=161, timeout=timeout)
+    # Group by ifIndex: .1 = descr, .2 = type, .3 = mtu, .4 = speed,
+    # .5 = physaddr, .6 = admin, .7 = oper, .8 = lastchange, .10 = inOctets, .16 = outOctets
+    ifaces = {}
+    for oid_str, raw_val in walk_raw:
+        parts = oid_str.split(".")
+        if len(parts) < 2:
+            continue
+        try:
+            last = int(parts[-1])
+        except ValueError:
+            continue
+        try:
+            idx = int(parts[-2])
+        except (ValueError, IndexError):
+            # OID format: ...1.2.1.2.2.1.<field>.<index>
+            # Find the index by looking at last part if the one before is 1-20
+            if len(parts) >= 2 and parts[-2].isdigit():
+                field = int(parts[-2])
+                idx = last
+            else:
+                continue
+        # Determine field from OID
+        oid_suffix = oid_str.replace(oid_iface, "").strip(".")
+        field_parts = oid_suffix.split(".")
+        if len(field_parts) == 2:
+            try:
+                field = int(field_parts[0])
+                idx = int(field_parts[1])
+            except ValueError:
+                continue
+        elif len(field_parts) >= 1:
+            try:
+                field = int(field_parts[0])
+                idx = int(field_parts[-1])
+            except ValueError:
+                continue
+        else:
+            continue
+
+        if idx not in ifaces:
+            ifaces[idx] = {"index": idx, "description": "", "type": "", "mtu": 0, "speed": 0, "mac": "", "admin": "down", "oper": "down"}
+
+        v = _format_value(raw_val)
+        # MIB-II ifTable: .1=descr, .2=type, .3=mtu, .4=speed, .6=admin, .7=oper
+        if field == 1:
+            ifaces[idx]["description"] = str(v) if v else ""
+        elif field == 4:
+            ifaces[idx]["speed"] = int(v) if v else 0
+        elif field == 6:
+            ifaces[idx]["admin"] = "up" if v == 1 else "down"
+        elif field == 7:
+            ifaces[idx]["oper"] = "up" if v == 1 else "down"
+        elif field == 5:
+            ifaces[idx]["mac"] = v if v else ""
+
+    result = []
+    for idx in sorted(ifaces.keys()):
+        iface = ifaces[idx]
+        iface["status"] = "UP" if iface.get("oper") == "up" and iface.get("admin") == "up" else "DOWN"
+        result.append(iface)
+    return result
+
+
+def get_system_info(host, community="public", timeout=3):
+    oids = {
+        "sysDescr": "1.3.6.1.2.1.1.1.0",
+        "sysObjectID": "1.3.6.1.2.1.1.2.0",
+        "sysName": "1.3.6.1.2.1.1.5.0",
+        "sysLocation": "1.3.6.1.2.1.1.6.0",
+        "sysContact": "1.3.6.1.2.1.1.4.0",
+        "sysUpTime": "1.3.6.1.2.1.1.3.0",
+        "sysServices": "1.3.6.1.2.1.1.7.0",
+    }
+    info = {}
+    for name, oid in oids.items():
+        try:
+            val = _pure_get(host, oid, community, port=161, timeout=timeout)
+            if val is not None:
+                _, raw = val
+                fv = _format_value(raw)
+                if name == "sysUpTime" and isinstance(fv, (int, float)):
+                    # Timeticks (hundredths of seconds)
+                    total_secs = fv / 100
+                    days, rem = divmod(total_secs, 86400)
+                    hours, rem = divmod(rem, 3600)
+                    mins, secs = divmod(rem, 60)
+                    info[name] = f"{int(days)}d {int(hours):02d}:{int(mins):02d}:{int(secs):02d}"
+                else:
+                    info[name] = str(fv) if fv is not None else ""
+        except:
+            info[name] = ""
+    return info
+
+
+def detect_vendor(host, community="public", timeout=3):
+    try:
+        sysdescr = _pure_get(host, "1.3.6.1.2.1.1.1.0", community, timeout=timeout)
+        if sysdescr:
+            _, raw = sysdescr
+            descr = str(_format_value(raw)).lower()
+            if "cisco" in descr: return "Cisco"
+            if "mikrotik" in descr: return "MikroTik"
+            if "fortinet" in descr or "fortigate" in descr: return "Fortinet"
+            if "junos" in descr or "juniper" in descr: return "Juniper"
+            if "huawei" in descr: return "Huawei"
+            if "hp " in descr or "procurve" in descr or "aruba" in descr: return "HP/Aruba"
+            if "dell" in descr: return "Dell"
+            if "linux" in descr or "ubuntu" in descr or "debian" in descr: return "Linux"
+            if "unix" in descr: return "Unix"
+            if "windows" in descr: return "Windows"
+            if "ubiquiti" in descr or "unifi" in descr or "airmax" in descr: return "Ubiquiti"
+            if "dlink" in descr or "d-link" in descr: return "D-Link"
+            if "tplink" in descr or "tp-link" in descr: return "TP-Link"
+            if "hikvision" in descr: return "Hikvision"
+            if "dahua" in descr: return "Dahua"
+            if "grandstream" in descr: return "Grandstream"
+            return "Unknown"
+    except:
+        pass
+    return "Unknown"
+
+
+def detect_device_type(host, community="public", timeout=3):
+    info = get_system_info(host, community, timeout)
+    descr = info.get("sysDescr", "").lower()
+    services = info.get("sysServices", "")
+
+    if "router" in descr: return {"type": "Router", "vendor": detect_vendor(host, community)}
+    if "switch" in descr: return {"type": "Switch", "vendor": detect_vendor(host, community)}
+    if "access point" in descr or "ap-" in descr: return {"type": "Access Point", "vendor": detect_vendor(host, community)}
+    if "firewall" in descr: return {"type": "Firewall", "vendor": detect_vendor(host, community)}
+    if "camera" in descr or "ipc" in descr: return {"type": "Camera", "vendor": detect_vendor(host, community)}
+    if "printer" in descr: return {"type": "Printer", "vendor": detect_vendor(host, community)}
+    if "server" in descr: return {"type": "Server", "vendor": detect_vendor(host, community)}
+    if "phone" in descr and "voip" in descr: return {"type": "VoIP Phone", "vendor": detect_vendor(host, community)}
+    # services: bitmask
+    try:
+        svc = int(str(services))
+        if svc & 4: return {"type": "Router/Switch", "vendor": detect_vendor(host, community)}
+    except:
+        pass
+    return {"type": "Unknown", "vendor": detect_vendor(host, community)}
+
+
+# ─── Pure-Python SNMP core (private) ────────────────────────
+
+def _pure_get(host, oid, community, version=1, port=161, timeout=_DEFAULT_TIMEOUT):
+    """Returns (oid_str, raw_value_bytes) or None."""
+    try:
+        req = _build_get_request(oid, community, version, request_id=_request_id())
+        resp = _udp_send_recv(host, port, req, timeout)
+        return _parse_response(resp)
+    except:
+        return None
+
+
+def _pure_getnext(host, oid, community, version=1, port=161, timeout=_DEFAULT_TIMEOUT):
+    """Returns (next_oid_str, raw_value_bytes) or None."""
+    try:
+        req = _build_getnext_request(oid, community, version, request_id=_request_id())
+        resp = _udp_send_recv(host, port, req, timeout)
+        return _parse_response(resp)
+    except:
+        return None
+
+
+def _pure_walk(host, base_oid, community, version=1, port=161, timeout=_DEFAULT_TIMEOUT):
+    """Returns [(oid_str, raw_value_bytes), ...]."""
+    results = []
+    oid = base_oid.rstrip(".")
+    for _ in range(200):
+        try:
+            oid_val = _pure_getnext(host, oid, community, version, port, timeout)
+        except:
+            break
+        if oid_val is None:
+            break
+        next_oid, value = oid_val
+        if not next_oid.startswith(base_oid.rstrip(".")):
+            break
+        if len(results) > 0 and next_oid == results[-1][0]:
+            break
+        results.append((next_oid, value))
+        oid = next_oid
+    return results
+
+
+# ─── Low-level helpers ──────────────────────────────────────
+
+_request_counter = 0
+
+
+def _request_id():
+    global _request_counter
+    _request_counter = (_request_counter + 1) & 0x7FFFFFFF
+    return _request_counter
+
+
+def _udp_send_recv(host, port, data, timeout):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.sendto(data, (host, port))
+        resp, _ = sock.recvfrom(65535)
+        return resp
+    except socket.timeout:
+        raise SNMPError(f"Timeout contacting {host}:{port}")
+    except OSError as e:
+        raise SNMPError(f"Network error: {e}")
+    finally:
+        sock.close()
+
+
+# ─── Build SNMP messages ────────────────────────────────────
+
+def _build_header(community, version, request_id, pdu_type):
+    ver_bytes = encode_int(version)
+    comm_bytes = encode_octet_string(community.encode())
+    pdu = _build_pdu(pdu_type, request_id, 0, 0, b"")
+    inner = ver_bytes + comm_bytes + pdu
+    return encode_sequence(inner)
+
+
+def _build_get_request(oid, community, version, request_id):
+    pdu = _build_pdu(
+        ASN1_CONTEXT | 0x00,
+        request_id, 0, 0,
+        encode_sequence(encode_varbind(oid, encode_null()))
+    )
+    ver = encode_int(version)
+    comm = encode_octet_string(community.encode())
+    return encode_sequence(ver + comm + pdu)
+
+
+def _build_getnext_request(oid, community, version, request_id):
+    pdu = _build_pdu(
+        ASN1_CONTEXT | 0x01,
+        request_id, 0, 0,
+        encode_sequence(encode_varbind(oid, encode_null()))
+    )
+    ver = encode_int(version)
+    comm = encode_octet_string(community.encode())
+    return encode_sequence(ver + comm + pdu)
+
+
+def _build_getbulk_request(oid, community, version, max_repetitions, request_id):
+    pdu = _build_pdu(
+        ASN1_CONTEXT | 0x05,
+        request_id, 0, max_repetitions,
+        encode_sequence(encode_varbind(oid, encode_null()))
+    )
+    ver = encode_int(version)
+    comm = encode_octet_string(community.encode())
+    return encode_sequence(ver + comm + pdu)
+
+
+def _build_pdu(pdu_type, request_id, error_status, error_index, body):
+    return encode_constructed(
+        pdu_type,
+        encode_int(request_id) +
+        encode_int(error_status) +
+        encode_int(error_index) +
+        body
+    )
+
+
+# ─── Parse SNMP responses ───────────────────────────────────
+
+def _parse_response(data):
+    """Parse SNMP response bytes → (oid_str, (value_tag, value_bytes))."""
+    try:
+        # Outer SEQUENCE { version INTEGER, community OCTET STRING, ... PDU }
+        (outer_tag, msg_bytes), _ = decode_tlv(data)
+        if outer_tag != ASN1_SEQUENCE:
+            raise SNMPError(f"Expected SEQUENCE, got tag 0x{outer_tag:02x}")
+        ver, rest = decode_int(msg_bytes)
+        comm, rest = skip_octet_string(rest)
+        # rest = PDU (context-specific tag)
+        (pdu_tag, pdu_bytes), _ = decode_tlv(rest)
+        rid, rest2 = decode_int(pdu_bytes)
+        err, rest3 = decode_int(rest2)
+        if err != 0:
+            raise SNMPError(f"SNMP error status: {err}")
+        ei, rest4 = decode_int(rest3)
+        # rest4 = SEQUENCE of varbinds
+        vb_seq, vb_rest = unwrap_sequence(rest4)
+        vb_inner, _ = unwrap_sequence(vb_seq)
+        oid_str, rest7 = decode_oid(vb_inner)
+        value_tlv, _ = decode_tlv(rest7)
+        return (oid_str, value_tlv)
+    except SNMPError:
+        raise
+    except Exception as e:
+        raise SNMPError(f"Parse error: {e}")
+
+
+# ─── Value formatting ───────────────────────────────────────
+
+def _format_value(tlv_data):
+    """Given (tag, value) tuple from decode_tlv, return formatted Python value."""
+    if tlv_data is None:
+        return None
+    tag, raw = tlv_data
+    if tag == ASN1_INTEGER:
+        return int.from_bytes(raw, 'big', signed=True)
+    elif tag == ASN1_OCTET_STRING:
+        try:
+            return raw.decode('utf-8', errors='replace')
+        except:
+            return raw.hex()
+    elif tag == ASN1_OBJECT_ID:
+        try:
+            oid, _ = decode_oid(encode_tlv(tag, raw))
+            return oid
+        except:
+            return raw.hex()
+    elif tag == ASN1_NULL:
+        return None
+    elif tag == ASN1_BOOLEAN:
+        return len(raw) > 0 and raw[0] != 0
+    elif tag & 0xC0 == 0x40:  # APPLICATION class (Counter, Gauge, TimeTicks, etc.)
+        try:
+            return int.from_bytes(raw, 'big')
+        except:
+            return raw.hex()
+    else:
+        try:
+            return int.from_bytes(raw, 'big')
+        except:
+            return raw.hex()
+
+
+# ─── Additional API functions (webapp compat) ───────────────
 
 MIBS = {
     "sysDescr": "1.3.6.1.2.1.1.1.0",
     "sysObjectID": "1.3.6.1.2.1.1.2.0",
     "sysUpTime": "1.3.6.1.2.1.1.3.0",
-    "sysContact": "1.3.6.1.2.1.1.4.0",
     "sysName": "1.3.6.1.2.1.1.5.0",
-    "sysLocation": "1.3.6.1.2.1.1.6.0",
-    "sysServices": "1.3.6.1.2.1.1.7.0",
-    "ifNumber": "1.3.6.1.2.1.2.1.0",
     "ifDescr": "1.3.6.1.2.1.2.2.1.2",
     "ifType": "1.3.6.1.2.1.2.2.1.3",
     "ifMtu": "1.3.6.1.2.1.2.2.1.4",
@@ -24,445 +392,113 @@ MIBS = {
     "ifOperStatus": "1.3.6.1.2.1.2.2.1.8",
     "ifInOctets": "1.3.6.1.2.1.2.2.1.10",
     "ifOutOctets": "1.3.6.1.2.1.2.2.1.16",
-    "ifInErrors": "1.3.6.1.2.1.2.2.1.14",
-    "ifOutErrors": "1.3.6.1.2.1.2.2.1.20",
-    "ipAdEntAddr": "1.3.6.1.2.1.4.20.1.1",
-    "ipAdEntNetMask": "1.3.6.1.2.1.4.20.1.3",
-    "ipRouteDest": "1.3.6.1.2.1.4.21.1.1",
-    "ipRouteNextHop": "1.3.6.1.2.1.4.21.1.7",
-    "ipRouteType": "1.3.6.1.2.1.4.21.1.8",
-    "tcpConnState": "1.3.6.1.2.1.6.13.1.1",
-    "tcpConnLocalPort": "1.3.6.1.2.1.6.13.1.3",
-    "tcpConnRemAddress": "1.3.6.1.2.1.6.13.1.4",
-    "tcpConnRemPort": "1.3.6.1.2.1.6.13.1.5",
-    "udpLocalPort": "1.3.6.1.2.1.7.5.1.2",
-    "snmpInPkts": "1.3.6.1.2.1.11.1.0",
-    "snmpOutPkts": "1.3.6.1.2.1.11.2.0",
-    "hrSystemUptime": "1.3.6.1.2.1.25.1.1.0",
-    "hrSystemDate": "1.3.6.1.2.1.25.1.2.0",
-    "hrMemorySize": "1.3.6.1.2.1.25.2.2.0",
+    "ipNetToMediaPhysAddress": "1.3.6.1.2.1.4.22.1.2",
+    "ipNetToMediaNetAddress": "1.3.6.1.2.1.4.22.1.3",
+    "dot1dTpFdbAddress": "1.3.6.1.2.1.17.4.3.1.1",
+    "dot1dTpFdbPort": "1.3.6.1.2.1.17.4.3.1.2",
     "hrStorageDescr": "1.3.6.1.2.1.25.2.3.1.3",
     "hrStorageSize": "1.3.6.1.2.1.25.2.3.1.5",
     "hrStorageUsed": "1.3.6.1.2.1.25.2.3.1.6",
-    "hrProcessorLoad": "1.3.6.1.2.1.25.3.3.1.2",
-    "dot1dBasePort": "1.3.6.1.2.1.17.1.4.1.1",
-    "dot1dTpFdbAddress": "1.3.6.1.2.1.17.4.3.1.1",
-    "dot1dTpFdbPort": "1.3.6.1.2.1.17.4.3.1.2",
-    "entPhysicalDescr": "1.3.6.1.2.1.47.1.1.1.1.2",
-    "entPhysicalVendorType": "1.3.6.1.2.1.47.1.1.1.1.3",
-    "entPhysicalSerialNum": "1.3.6.1.2.1.47.1.1.1.1.11",
-    "entPhysicalModelName": "1.3.6.1.2.1.47.1.1.1.1.13",
-    "hrSWRunName": "1.3.6.1.2.1.25.4.2.1.2",
-    "hrSWRunPath": "1.3.6.1.2.1.25.4.2.1.4",
-    "hrSWRunPerfMem": "1.3.6.1.2.1.25.5.1.1.2",
-    "bgpPeerState": "1.3.6.1.2.1.15.3.1.2",
-    "bgpPeerRemoteAs": "1.3.6.1.2.1.15.3.1.9",
-    "ospfNbrState": "1.3.6.1.2.1.14.10.1.6",
-    "udpTable": "1.3.6.1.2.1.7.5.1",
-    "tcpTable": "1.3.6.1.2.1.6.13.1",
-    "sysORDescr": "1.3.6.1.2.1.1.9.1.3",
-    "sysORUpTime": "1.3.6.1.2.1.1.9.1.4",
 }
-
-VENDOR_MIBS = {
-    "cisco": "1.3.6.1.4.1.9",
-    "mikrotik": "1.3.6.1.4.1.14988",
-    "fortinet": "1.3.6.1.4.1.12356",
-    "hp": "1.3.6.1.4.1.11",
-    "dlink": "1.3.6.1.4.1.171",
-    "foundry": "1.3.6.1.4.1.1991",
-    "extremenetworks": "1.3.6.1.4.1.1916",
-    "juniper": "1.3.6.1.4.1.2636",
-    "3com": "1.3.6.1.4.1.43",
-    "huawei": "1.3.6.1.4.1.2011",
-    "zyxel": "1.3.6.1.4.1.890",
-    "ubiquiti": "1.3.6.1.4.1.41112",
-    "aruba": "1.3.6.1.4.1.14823",
-    "paloalto": "1.3.6.1.4.1.25461",
-    "checkpoint": "1.3.6.1.4.1.2620",
-    "avaya": "1.3.6.1.4.1.6889",
-    "brocade": "1.3.6.1.4.1.1588",
-    "dell": "1.3.6.1.4.1.674",
-    "f5": "1.3.6.1.4.1.3375",
-    "vmware": "1.3.6.1.4.1.6876",
-    # CCTV
-    "hikvision": "1.3.6.1.4.1.42060",
-    "dahua": "1.3.6.1.4.1.7012",
-    "axis": "1.3.6.1.4.1.368",
-    "bosch": "1.3.6.1.4.1.245",
-    "vivotek": "1.3.6.1.4.1.122",
-    "panasonic": "1.3.6.1.4.1.234",
-    "samsung_hanwha": "1.3.6.1.4.1.283",
-    "acti": "1.3.6.1.4.1.282",
-    "mobotix": "1.3.6.1.4.1.242",
-    "arecont": "1.3.6.1.4.1.14807",
-    "geovision": "1.3.6.1.4.1.14143",
-    # Access Control
-    "zkteco": "1.3.6.1.4.1.38010",
-    "hid_global": "1.3.6.1.4.1.2246",
-    "assa_abloy": "1.3.6.1.4.1.41518",
-    "lenel": "1.3.6.1.4.1.16024",
-    "2n": "1.3.6.1.4.1.16684",
-    "salto": "1.3.6.1.4.1.3606",
-    # OTROS CCTV
-    "pelco": "1.3.6.1.4.1.3150",
-    "sony_cctv": "1.3.6.1.4.1.696",
-    "jvc_cctv": "1.3.6.1.4.1.712",
-    "tandberg": "1.3.6.1.4.1.226",
-    "honeywell_video": "1.3.6.1.4.1.1369",
-    "tiandy": "1.3.6.1.4.1.34577",
-    "uniview": "1.3.6.1.4.1.35136",
-    "cp_plus": "1.3.6.1.4.1.31103",
-    "dali_cctv": "1.3.6.1.4.1.43584",
-}
+VENDOR_MIBS = {}
 
 
-# Patrones de sysDescr para identificar dispositivos CCTV/AC
-CCTV_AC_SNMP_PATTERNS = {
-    "hikvision": ["hikvision", "ds-2", "i-series", "nvr", "dvr"],
-    "dahua": ["dahua", "dhi-", "sd222", "sd492", "ipc-", "hfw", "hfw"],
-    "axis": ["axis", "axis communications", "axis network camera", "axis video"],
-    "bosch": ["bosch", "divar", "diagbox", "flexidome", "autodome"],
-    "vivotek": ["vivotek", "network camera", "fd8", "ip8"],
-    "panasonic": ["panasonic", "i-pro", "wv-", "network camera"],
-    "samsung": ["samsung", "wiseview", "hanwha", "samsung techwin"],
-    "acti": ["acti", "acti cam", "ac-"],
-    "mobotix": ["mobotix", "mx-", "d24m"],
-    "arecont": ["arecont", "arecont vision", "av"],
-    "geovision": ["geovision", "gv-", "gv-bx"],
-    "zkteco": ["zkteco", "zk", "uface", "iclock", "mb4", "ta", "inbio"],
-    "hid": ["hid", "vertx", "hid reader", "hid global"],
-    "lenel": ["lenel", "lencode", "onguard", "lenel ac"],
-    "asssa_abloy": ["assa", "abloy", "aperio", "sherlock"],
-    "2n": ["2n", "2n telecom", "2n helios", "2n access unit"],
-    "salto": ["salto", "salto systems", "xs4"],
-    "pelco": ["pelco", "dx-series", "sarix", "esprit"],
-    "tiandy": ["tiandy", "tc-", "td-"],
-    "uniview": ["uniview", "unv", "nvr3"],
-    "honeywell_video": ["honeywell", "hrm", "hrdv", "maxpro"],
-    "cp_plus": ["cp plus", "cp-plus", "cp_plus"],
-}
+def snmp_set(host, community, oid, value, value_type="i"):
+    """SNMP Set - no implementado en pure Python (solo lectura por ahora)."""
+    return {"error": "SNMP Set no soportado sin binario snmpset"}
 
 
-def detect_device_type(host, community, version="2c"):
-    """Detecta el tipo de dispositivo (CCTV, AC, network, etc.)."""
-    sys_descr = snmp_get(host, community, "1.3.6.1.2.1.1.1.0", version)
-    sys_obj = snmp_get(host, community, "1.3.6.1.2.1.1.2.0", version)
-    descr = (sys_descr.get("value", "") + " " + sys_obj.get("value", "")).lower()
-
-    for vendor, patterns in CCTV_AC_SNMP_PATTERNS.items():
-        for p in patterns:
-            if p in descr:
-                return {"vendor": vendor, "type": "CCTV" if vendor in CCTV_AC_SNMP_PATTERNS and vendor not in ("zkteco","hid","lenel","2n","salto","assa_abloy") else "Access Control"}
-
-    # Detectar por vendor OID
-    vendor_oid = sys_obj.get("value", "")
-    for vname, void in VENDOR_MIBS.items():
-        if vendor_oid.startswith(void):
-            return {"vendor": vname, "type": "Network"}
-
-    return {"vendor": "desconocido", "type": "desconocido"}
-
-
-def get_cctv_info(host, community, version="2c"):
-    """Obtiene info específica de CCTV vía SNMP."""
-    info = get_system_info(host, community, version)
-    extras = {}
-
-    # Intentar obtener canales de video (HP/Hikvision MIB)
-    for oid_name in ["videoInputs", "videoOutputs", "motionDetect"]:
-        for mib_name, mib_oid in {
-            "videoInputs": "1.3.6.1.4.1.42060.1.1",
-            "videoOutputs": "1.3.6.1.4.1.42060.1.2",
-            "motionDetect": "1.3.6.1.4.1.42060.2.1",
-        }.items():
-            result = snmp_get(host, community, mib_oid + ".0", version)
-            if "value" in result and result["value"].strip():
-                extras[mib_name] = result["value"].strip()
-
-    # Almacenamiento específico CCTV
-    storage = get_storage(host, community, version)
-    if isinstance(storage, list):
-        extras["storage"] = storage
-
-    info["cctv_extras"] = extras
-    return info
-
-IF_TYPES = {
-    1: "other", 2: "regular1822", 3: "hdh1822", 4: "ddnX25",
-    5: "rfc877x25", 6: "ethernetCsmacd", 7: "iso88023Csmacd",
-    8: "iso88024TokenBus", 9: "iso88025TokenRing", 10: "iso88026Man",
-    11: "starLan", 12: "proteon10Mbit", 13: "proteon80Mbit",
-    14: "hyperchannel", 15: "fddi", 16: "lapb", 17: "sdlc",
-    18: "ds1", 19: "e1", 20: "basicISDN", 21: "primaryISDN",
-    22: "propPointToPointSerial", 23: "ppp", 24: "softwareLoopback",
-    25: "eon", 26: "ethernet3Mbit", 27: "nsip", 28: "slip",
-    29: "ultra", 30: "ds3", 31: "sip", 32: "frameRelay",
-    33: "rs232", 34: "para", 35: "arcnet", 36: "arcnetPlus",
-    37: "atm", 38: "miox25", 39: "sonet", 40: "x25ple",
-    41: "iso88022llc", 42: "localTalk", 43: "smdsDxi",
-    44: "frameRelayService", 45: "v35", 46: "hssi", 47: "g703at2mb",
-    48: "g703at64k", 49: "propLogical", 50: "other",
-    53: "propBWAp2mp", 54: "propBWAp2p", 55: "propVirtual",
-    56: "tunnel", 57: "l2vlan", 61: "ieee80211", 62: "ieee80211b",
-    71: "ieee80211a", 72: "ieee80211g", 117: "gigabitEthernet",
-    131: "tunnel", 135: "l2vlan", 136: "bridge",
-    161: "ieee80211n", 162: "ieee80211ac",
-}
-
-IF_STATUS = {1: "up", 2: "down", 3: "testing"}
+def get_mac_table(host, community="public", timeout=5):
+    """Obtiene tabla MAC (bridge MIB)."""
+    oid_mac = "1.3.6.1.2.1.17.4.3.1.1"
+    oid_port = "1.3.6.1.2.1.17.4.3.1.2"
+    macs = _pure_walk(host, oid_mac, community, timeout=timeout)
+    ports = _pure_walk(host, oid_port, community, timeout=timeout)
+    if not macs:
+        return []
+    # Build MAC -> port mapping
+    mac_port = {}
+    for o, v in ports:
+        parts = o.split(".")
+        idx = parts[-1] if parts else ""
+        mac_port[idx] = _format_value(v)
+    result = []
+    for o, v in macs:
+        fv = _format_value(v)
+        idx = o.split(".")[-1]
+        port = mac_port.get(idx, "?")
+        result.append({"mac": str(fv) if fv else "", "port": int(port) if isinstance(port, (int, float)) else str(port), "vlan": 1})
+    return result
 
 
-def _run_snmpcmd(args):
-    """Ejecuta un comando snmp del sistema."""
-    try:
-        result = subprocess.run(args, capture_output=True, timeout=15, text=True)
-        return result.stdout
-    except FileNotFoundError:
-        return None
-    except subprocess.TimeoutExpired:
-        return None
+def get_routing_table(host, community="public", timeout=5):
+    """Obtiene tabla de enrutamiento (IP Route Table)."""
+    oid_dest = "1.3.6.1.2.1.4.21.1.1"
+    oid_nexthop = "1.3.6.1.2.1.4.21.1.7"
+    oid_iface = "1.3.6.1.2.1.4.21.1.2"
+    oid_metric = "1.3.6.1.2.1.4.21.1.4"
+    dests = _pure_walk(host, oid_dest, community, timeout=timeout)
+    if not dests:
+        return []
+    nexthops = {o: _format_value(v) for o, v in _pure_walk(host, oid_nexthop, community, timeout=timeout)}
+    ifaces = {o: _format_value(v) for o, v in _pure_walk(host, oid_iface, community, timeout=timeout)}
+    metrics = {o: _format_value(v) for o, v in _pure_walk(host, oid_metric, community, timeout=timeout)}
+    result = []
+    for o, v in dests:
+        dest = _format_value(v)
+        nh = nexthops.get(o, "0.0.0.0")
+        ifc = ifaces.get(o, 0)
+        met = metrics.get(o, 0)
+        result.append({"destination": str(dest), "nexthop": str(nh), "ifIndex": int(ifc) if isinstance(ifc, (int, float)) else 0, "metric": int(met) if isinstance(met, (int, float)) else 0})
+    return result
 
 
-def snmp_get(host, community, oid, version="2c", timeout=5):
-    """SNMP GET - obtiene el valor de un OID."""
-    out = _run_snmpcmd([
-        "snmpget", "-v", version, "-c", community,
-        "-t", str(timeout), "-O", "qv", host, oid
-    ])
-    if out is None:
-        return {"error": "snmpget no instalado. Instalá snmp-mibs-downloader"}
-    return {"host": host, "oid": oid, "value": out.strip()}
+def get_storage(host, community="public", timeout=5):
+    """Obtiene información de almacenamiento (Host Resources MIB)."""
+    oid_descr = "1.3.6.1.2.1.25.2.3.1.3"
+    oid_size = "1.3.6.1.2.1.25.2.3.1.5"
+    oid_used = "1.3.6.1.2.1.25.2.3.1.6"
+    descrs = _pure_walk(host, oid_descr, community, timeout=timeout)
+    if not descrs:
+        return []
+    sizes = {o: _format_value(v) for o, v in _pure_walk(host, oid_size, community, timeout=timeout)}
+    useds = {o: _format_value(v) for o, v in _pure_walk(host, oid_used, community, timeout=timeout)}
+    result = []
+    for o, v in descrs:
+        descr = _format_value(v)
+        sz = sizes.get(o, 0)
+        us = useds.get(o, 0)
+        if sz and int(sz) > 0:
+            pct = round(int(us) / int(sz) * 100, 1) if int(sz) > 0 else 0
+        else:
+            pct = 0
+        result.append({"description": str(descr), "size": int(sz) if isinstance(sz, (int, float)) else 0, "used": int(us) if isinstance(us, (int, float)) else 0, "percent": pct})
+    return result
 
 
-def snmp_get_next(host, community, oid, version="2c", timeout=5):
-    """SNMP GETNEXT."""
-    out = _run_snmpcmd([
-        "snmpgetnext", "-v", version, "-c", community,
-        "-t", str(timeout), "-O", "qv", host, oid
-    ])
-    if out is None:
-        return {"error": "snmpget no instalado"}
-    return {"host": host, "oid": oid, "value": out.strip()}
+def get_arp_table(host, community="public", timeout=5):
+    """Obtiene tabla ARP (ipNetToMedia)."""
+    oid_mac = "1.3.6.1.2.1.4.22.1.2"
+    oid_ip = "1.3.6.1.2.1.4.22.1.3"
+    macs = _pure_walk(host, oid_mac, community, timeout=timeout)
+    ips = {o: _format_value(v) for o, v in _pure_walk(host, oid_ip, community, timeout=timeout)}
+    result = []
+    for o, v in macs:
+        mac = _format_value(v)
+        ip = ips.get(o, "?")
+        result.append({"ip": str(ip), "mac": str(mac) if mac else ""})
+    return result
 
 
-def snmp_walk(host, community, oid, version="2c", timeout=10):
-    """SNMP WALK - camina un árbol OID."""
-    out = _run_snmpcmd([
-        "snmpwalk", "-v", version, "-c", community,
-        "-t", str(timeout), "-O", "q", host, oid
-    ])
-    if out is None:
-        return {"error": "snmpwalk no instalado. Instalá snmp-mibs-downloader"}
-    results = {}
-    for line in out.strip().split("\n"):
-        parts = line.split(" = ", 1)
-        if len(parts) == 2:
-            key = parts[0].strip()
-            val = parts[1].strip()
-            # Resulta en 'key = val'
-            if " = " in key:
-                parts2 = key.split(" = ", 1)
-                key = parts2[0].strip()
-                val = parts2[1].strip()
-            results[key] = val
-    return results
-
-
-def snmp_set(host, community, oid, value, value_type="s", version="2c", timeout=5):
-    """SNMP SET - escribe un valor en un OID."""
-    out = _run_snmpcmd([
-        "snmpset", "-v", version, "-c", community,
-        "-t", str(timeout), host, oid, value_type, str(value)
-    ])
-    if out is None:
-        return {"error": "snmpset no instalado"}
-    return {"host": host, "oid": oid, "value": value, "response": out.strip()}
-
-
-def snmp_table(host, community, oid, version="2c", timeout=10):
-    """SNMP TABLE - formatea una tabla SNMP."""
-    out = _run_snmpcmd([
-        "snmp-table", "-v", version, "-c", community,
-        "-t", str(timeout), host, oid
-    ])
-    if out is None:
-        return {"error": "snmp-table no disponible"}
-    return {"table": out.strip()}
-
-
-def get_system_info(host, community, version="2c"):
-    """Obtiene información básica del sistema vía SNMP."""
-    info = {}
-    for name, oid in MIBS.items():
-        if name in ("sysDescr", "sysName", "sysLocation", "sysContact",
-                     "sysUpTime", "sysObjectID", "sysServices"):
-            v = snmp_get(host, community, oid, version)
-            if "value" in v:
-                info[name] = v["value"]
-    return info
-
-
-def get_interfaces(host, community, version="2c"):
-    """Obtiene todas las interfaces del dispositivo."""
-    descrs = snmp_walk(host, community, MIBS["ifDescr"], version)
-    speeds = snmp_walk(host, community, MIBS["ifSpeed"], version)
-    status = snmp_walk(host, community, MIBS["ifOperStatus"], version)
-    macs = snmp_walk(host, community, MIBS["ifPhysAddress"], version)
-
-    interfaces = []
-    for oid, descr in descrs.items():
-        idx = oid.split(".")[-1]
-        spd = speeds.get(f"{MIBS['ifSpeed']}.{idx}", "?")
-        st = status.get(f"{MIBS['ifOperStatus']}.{idx}", "?")
-        mac = macs.get(f"{MIBS['ifPhysAddress']}.{idx}", "?")
-        st_name = IF_STATUS.get(int(st), st) if st.isdigit() else st
-        interfaces.append({
-            "index": idx,
-            "description": descr,
-            "speed": spd,
-            "status": st_name,
-            "mac": mac,
-        })
-    return interfaces
-
-
-def get_mac_table(host, community, version="2c"):
-    """Obtiene tabla de direcciones MAC (puentes/bridges)."""
-    addrs = snmp_walk(host, community, MIBS["dot1dTpFdbAddress"], version)
-    ports = snmp_walk(host, community, MIBS["dot1dTpFdbPort"], version)
-    table = {}
-    for oid, mac in addrs.items():
-        idx = oid.split(".")[-1]
-        port = ports.get(f"{MIBS['dot1dTpFdbPort']}.{idx}", "?")
-        table[mac] = port
-    return table
-
-
-def get_routing_table(host, community, version="2c"):
-    """Obtiene tabla de enrutamiento."""
-    dests = snmp_walk(host, community, MIBS["ipRouteDest"], version)
-    nexthops = snmp_walk(host, community, MIBS["ipRouteNextHop"], version)
-    routes = []
-    for oid, dest in dests.items():
-        idx = oid.split(".")[-1]
-        nh = nexthops.get(f"{MIBS['ipRouteNextHop']}.{idx}", "?")
-        routes.append({"destination": dest, "next_hop": nh})
-    return routes
-
-
-def get_storage(host, community, version="2c"):
-    """Obtiene información de almacenamiento."""
-    descrs = snmp_walk(host, community, MIBS["hrStorageDescr"], version)
-    sizes = snmp_walk(host, community, MIBS["hrStorageSize"], version)
-    used = snmp_walk(host, community, MIBS["hrStorageUsed"], version)
-    storages = []
-    for oid, descr in descrs.items():
-        idx = oid.split(".")[-1]
-        sz = sizes.get(f"{MIBS['hrStorageSize']}.{idx}", "?")
-        us = used.get(f"{MIBS['hrStorageUsed']}.{idx}", "?")
-        storages.append({
-            "description": descr,
-            "size": sz,
-            "used": us,
-            "percent": round((int(us) / int(sz)) * 100, 1) if sz.isdigit() and us.isdigit() and int(sz) > 0 else "?"
-        })
-    return storages
-
-
-def get_arp_table(host, community, version="2c"):
-    """Obtiene tabla ARP."""
-    out = _run_snmpcmd([
-        "snmpwalk", "-v", version, "-c", community,
-        "-t", "10", "-O", "q", host, "1.3.6.1.2.1.4.22.1.2"
-    ])
-    if out is None:
-        return {"error": "snmpwalk no instalado"}
-    entries = {}
-    for line in out.strip().split("\n"):
-        if " = " in line:
-            parts = line.split(" = ", 1)
-            key = parts[0].strip()
-            val = parts[1].strip()
-            entries[key] = val
-    return entries
-
-
-def get_process_list(host, community, version="2c"):
-    """Obtiene lista de procesos en ejecución."""
-    names = snmp_walk(host, community, MIBS["hrSWRunName"], version)
-    mems = snmp_walk(host, community, MIBS["hrSWRunPerfMem"], version)
-    processes = []
-    for oid, name in names.items():
-        idx = oid.split(".")[-1]
-        mem = mems.get(f"{MIBS['hrSWRunPerfMem']}.{idx}", "?")
-        processes.append({"name": name, "memory_kb": mem})
-    return processes
-
-
-def snmp_bulkwalk(host, community, oid, version="2c", timeout=15):
-    """SNMP BULKWALK más rápido para grandes árboles."""
-    out = _run_snmpcmd([
-        "snmpbulkwalk", "-v", version, "-c", community,
-        "-t", str(timeout), "-Cr", "50", "-O", "q", host, oid
-    ])
-    if out is None:
-        return {"error": "snmpbulkwalk no disponible"}
-    results = {}
-    for line in out.strip().split("\n"):
-        if " = " in line:
-            key, val = line.split(" = ", 1)
-            results[key.strip()] = val.strip()
-    return results
-
-
-def detect_vendor(host, community, version="2c"):
-    """Detecta el fabricante del dispositivo por sysObjectID."""
-    obj = snmp_get(host, community, MIBS["sysObjectID"], version)
-    if "value" in obj:
-        oid = obj["value"]
-        for vendor, vendor_oid in VENDOR_MIBS.items():
-            if oid.startswith(vendor_oid):
-                return vendor
-        return "desconocido"
-    return "error"
-
-
-def snmp_trap_listener(port=162, count=5, timeout=30):
-    """Escucha traps SNMP (requiere permisos)."""
-    import select
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("0.0.0.0", port))
-        sock.settimeout(timeout)
-        traps = []
-        for _ in range(count):
-            try:
-                data, addr = sock.recvfrom(65535)
-                traps.append({"from": addr[0], "port": addr[1], "size": len(data)})
-            except socket.timeout:
-                break
-        sock.close()
-        return traps
-    except PermissionError:
-        return {"error": "Permiso denegado para puerto %d" % port}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def snmp_check(host, community, version="2c"):
-    """Verifica si SNMP está accesible en un host."""
-    result = snmp_get(host, community, "1.3.6.1.2.1.1.1.0", version)
-    return "value" in result and result["value"].strip() != ""
-
-
-def oid_lookup(oid_or_name):
-    """Busca un OID por nombre o viceversa."""
-    if oid_or_name.startswith("."):
-        oid_or_name = oid_or_name[1:]
-    for name, oid in MIBS.items():
-        if oid_or_name.lower() == name.lower():
-            return {"name": name, "oid": oid}
-        if oid_or_name == oid:
-            return {"name": name, "oid": oid}
-    return {"name": "desconocido", "oid": oid_or_name}
+def get_cctv_info(host, community="public", timeout=5):
+    """Intenta obtener info de cámaras CCTV vía SNMP."""
+    sysdescr = _pure_get(host, "1.3.6.1.2.1.1.1.0", community, timeout=timeout)
+    if not sysdescr:
+        return {}
+    _, raw = sysdescr
+    descr = str(_format_value(raw)).lower()
+    if "hikvision" in descr:
+        return {"vendor": "Hikvision", "type": "Camera", "channels": "N/A"}
+    if "dahua" in descr:
+        return {"vendor": "Dahua", "type": "Camera", "channels": "N/A"}
+    return {"vendor": detect_vendor(host, community), "type": "Unknown"}

@@ -201,3 +201,133 @@ def local_ip():
             return {"ip": ip, "subnet": subnet, "interface": ""}
         except:
             return {"ip": "unknown", "subnet": "unknown", "error": "No network detected"}
+
+
+def whois_lookup(query, server="whois.iana.org", port=43, timeout=10):
+    """Consulta WHOIS directa via TCP."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((server, port))
+        sock.sendall((query + "\r\n").encode())
+        data = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk: break
+            data += chunk
+        sock.close()
+        text = data.decode("utf-8", errors="replace")
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        return {"query": query, "server": server, "raw": "\n".join(lines[:60]), "lines": len(lines)}
+    except Exception as e:
+        return {"query": query, "server": server, "error": str(e)}
+
+
+def whois_auto(domain):
+    """WHOIS con redirección automática (IANA → whois del registro)."""
+    result = whois_lookup(domain)
+    if "error" in result:
+        return result
+    # Buscar whois server en la respuesta
+    for line in result.get("raw", "").split("\n"):
+        if "whois." in line.lower() and "server" in line.lower():
+            parts = line.split(":")
+            if len(parts) >= 2:
+                srv = parts[-1].strip()
+                if srv and srv != result["server"]:
+                    return whois_lookup(domain, server=srv)
+    return result
+
+
+def ntp_time(host="pool.ntp.org", timeout=3):
+    """Obtiene hora de un servidor NTP vía UDP."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        # NTP request: LI=0, VN=4, Mode=3
+        pkt = b"\x1b" + 47 * b"\x00"
+        sock.sendto(pkt, (host, 123))
+        data, _ = sock.recvfrom(1024)
+        sock.close()
+        if len(data) < 48:
+            return {"host": host, "error": "Respuesta corta"}
+        import struct
+        t = struct.unpack("!12I", data)[10]
+        from datetime import datetime, timezone
+        ntp_epoch = datetime(1900, 1, 1, tzinfo=timezone.utc)
+        ts = ntp_epoch.timestamp() + t
+        now = datetime.now(timezone.utc).timestamp()
+        offset = round(ts - now, 3)
+        return {
+            "host": host,
+            "ntp_time": datetime.fromtimestamp(ts, timezone.utc).isoformat(),
+            "local_time": datetime.now().isoformat(),
+            "offset_seconds": offset,
+            "stratum": data[47],
+        }
+    except Exception as e:
+        return {"host": host, "error": str(e)}
+
+
+def port_knock(host, ports, delay=0.2, timeout=2):
+    """Port knocking: envía TCP SYN a una secuencia de puertos."""
+    results = []
+    for port in ports:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            sock.connect((host, port))
+            sock.close()
+            results.append({"port": port, "status": "open"})
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            results.append({"port": port, "status": "sent"})
+        time.sleep(delay)
+    return {"host": host, "sequence": ports, "results": results, "count": len(results)}
+
+
+def http_status(url, timeout=5, follow=True):
+    """Verifica estado HTTP de una URL."""
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        if not follow:
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    return None
+            opener = urllib.request.build_opener(NoRedirect)
+            resp = opener.open(req, timeout=timeout)
+        else:
+            resp = urllib.request.urlopen(req, timeout=timeout)
+        return {
+            "url": url,
+            "status": resp.status,
+            "reason": resp.reason,
+            "redirected": resp.url != url,
+            "final_url": resp.url,
+        }
+    except urllib.error.HTTPError as e:
+        return {"url": url, "status": e.code, "reason": str(e.reason), "redirected": False, "final_url": url}
+    except Exception as e:
+        return {"url": url, "error": str(e)}
+
+
+def ping_latency(host, count=4, timeout=3):
+    """Mide latencia TCP connect a varios puertos (simula ping)."""
+    ports = [80, 443, 22, 8080]
+    results = []
+    for port in ports:
+        try:
+            start = time.time()
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            sock.connect((host, port))
+            elapsed = round((time.time() - start) * 1000, 1)
+            sock.close()
+            results.append({"port": port, "latency_ms": elapsed, "status": "ok"})
+        except:
+            pass
+    if not results:
+        return {"host": host, "error": "Sin respuesta en puertos comunes", "latency_ms": None}
+    avg = round(sum(r["latency_ms"] for r in results) / len(results), 1)
+    return {"host": host, "results": results, "latency_ms": avg, "min_ms": min(r["latency_ms"] for r in results), "max_ms": max(r["latency_ms"] for r in results)}

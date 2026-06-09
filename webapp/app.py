@@ -2,7 +2,15 @@ import sys
 import os
 import json
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Compatibilidad Android (Chaquopy): detectar si estamos en APK
+_ANDROID = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ROOT' in os.environ
+if _ANDROID:
+    # En Chaquopy, la raíz del proyecto está donde está server.py
+    _BASE = os.path.dirname(os.path.abspath(__file__))
+    if _BASE not in sys.path:
+        sys.path.insert(0, _BASE)
+else:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, jsonify, request, render_template, session
 from techbot.protocols.protocols_db import list_protocols, get_protocol, search_protocols
@@ -36,8 +44,12 @@ from techbot.access_control import (
     CREDENTIAL_TYPES, DOOR_STATES
 )
 from techbot import tools as tech_tools
+from techbot import wifi as wifi_tools
+from techbot import dhcp as dhcp_tools
+from techbot import bandwidth as bw_tools
 from techbot.scanner import (
     scan_ports as scanner_scan_ports,
+    scan_port as scanner_scan_port,
     quick_scan, discover_hosts, os_detection,
     traceroute, service_detection, compare_port_scans,
     export_scan_results, ping_host,
@@ -74,7 +86,17 @@ from techbot.topology import (
 )
 from techbot.topology.auto import discover_topology as auto_discover_topology
 
-app = Flask(__name__)
+# En Android (Chaquopy), Flask necesita rutas absolutas para templates/static
+_templates = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+_static = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if not os.path.isdir(_templates) and _ANDROID:
+    # Fallback: buscar relativo al server.py
+    _templates = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "templates")
+    _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "static")
+
+app = Flask(__name__,
+            template_folder=_templates if os.path.isdir(_templates) else "templates",
+            static_folder=_static if os.path.isdir(_static) else "static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "techbot-secret-key-change-in-prod")
 app.config["SESSION_COOKIE_NAME"] = "techbot_session"
 
@@ -89,6 +111,17 @@ def index():
 
 
 # ─── PROTOCOLOS ───────────────────────────────────────────────
+
+@app.route("/api/status")
+def api_status():
+    return jsonify({
+        "status": "ok",
+        "app": "TechBot",
+        "version": "1.0",
+        "android": _ANDROID,
+        "api_routes": len([r for r in app.url_map.iter_rules() if r.rule.startswith('/api/')]),
+    })
+
 
 @app.route("/api/protocols")
 def api_protocols():
@@ -779,7 +812,7 @@ def api_tools_http_title():
     if not host:
         return jsonify({"error": "Host requerido"}), 400
     try:
-        _, _, _, _, banner, _ = scan_port(host, port, timeout=3)
+        _, _, _, _, banner, _ = scanner_scan_port(host, port, timeout=3)
         title = ""
         server = ""
         for line in banner.split("\n"):
@@ -870,6 +903,118 @@ def api_tools_token():
 def api_tools_local_ip():
     try:
         return jsonify(tech_tools.local_ip())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/whois")
+def api_tools_whois():
+    query = request.args.get("query", "")
+    if not query:
+        return jsonify({"error": "Dominio/IP requerido"}), 400
+    try:
+        return jsonify(tech_tools.whois_auto(query))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/ntp")
+def api_tools_ntp():
+    host = request.args.get("host", "pool.ntp.org")
+    try:
+        return jsonify(tech_tools.ntp_time(host))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/port-knock")
+def api_tools_port_knock():
+    host = request.args.get("host", "")
+    ports_str = request.args.get("ports", "")
+    delay = request.args.get("delay", 0.2, type=float)
+    if not host or not ports_str:
+        return jsonify({"error": "Host y puertos requeridos"}), 400
+    ports = [int(p.strip()) for p in ports_str.split(",") if p.strip().isdigit()]
+    try:
+        return jsonify(tech_tools.port_knock(host, ports, delay))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/http-status")
+def api_tools_http_status():
+    url = request.args.get("url", "")
+    follow = request.args.get("follow", "1") == "1"
+    if not url:
+        return jsonify({"error": "URL requerida"}), 400
+    try:
+        return jsonify(tech_tools.http_status(url, follow=follow))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/ping-latency")
+def api_tools_ping_latency():
+    host = request.args.get("host", "")
+    if not host:
+        return jsonify({"error": "Host requerido"}), 400
+    try:
+        return jsonify(tech_tools.ping_latency(host))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/wifi/scan")
+def api_wifi_scan():
+    interface = request.args.get("interface", "")
+    try:
+        return jsonify(wifi_tools.scan_wifi(interface or None))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/wifi/interfaces")
+def api_wifi_interfaces():
+    try:
+        return jsonify(wifi_tools.interface_info())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dhcp/discover")
+def api_dhcp_discover():
+    timeout = request.args.get("timeout", 3, type=int)
+    try:
+        return jsonify(dhcp_tools.discover_dhcp_servers(timeout))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bandwidth/poll")
+def api_bw_poll():
+    host = request.args.get("host", "")
+    community = request.args.get("community", "public")
+    ifindex = request.args.get("ifindex", "", type=int)
+    name = request.args.get("name", f"if{ifindex}")
+    if not host or not ifindex:
+        return jsonify({"error": "host e ifindex requeridos"}), 400
+    try:
+        return jsonify(bw_tools.poll_interface(host, community, ifindex, name))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bandwidth/traffic")
+def api_bw_traffic():
+    host = request.args.get("host", "")
+    ifindex = request.args.get("ifindex", "", type=int)
+    if not host or not ifindex:
+        return jsonify({"error": "host e ifindex requeridos"}), 400
+    try:
+        result = bw_tools.get_traffic(host, ifindex)
+        if not result:
+            return jsonify({"error": "Sin datos. Primero usá /api/bandwidth/poll"}), 404
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1184,11 +1329,7 @@ def api_topology_discover():
     depth = data.get("depth", 2)
     if not seed:
         return jsonify({"error": "IP semilla requerida"}), 400
-    try:
-        result = auto_discover_topology(seed, community, depth)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return _async_or_run(auto_discover_topology, seed, community, depth)
 
 
 @app.route("/api/topology", methods=["GET", "POST"])

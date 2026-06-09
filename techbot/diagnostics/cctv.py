@@ -1,5 +1,4 @@
 import socket
-import subprocess
 import urllib.request
 import urllib.error
 import time
@@ -8,13 +7,18 @@ import json
 
 def _ping(host, timeout=3):
     try:
-        param = "-n" if subprocess.os.name == "nt" else "-c"
-        r = subprocess.run(
-            ["ping", param, "1", "-W", str(timeout), host],
-            capture_output=True, text=True, timeout=timeout + 2
-        )
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        for port in [80, 443, 22, 8080, 554, 8000]:
+            try:
+                if s.connect_ex((host, port)) == 0:
+                    s.close()
+                    return True
+            except:
+                pass
+        s.close()
+        return False
+    except:
         return False
 
 

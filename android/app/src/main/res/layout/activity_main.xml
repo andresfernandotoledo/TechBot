@@ -2,7 +2,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="#1a1a2e">
 
     <LinearLayout
         android:id="@+id/topBar"
@@ -11,20 +12,23 @@
         android:gravity="center_vertical"
         android:paddingHorizontal="8dp"
         android:background="#0f3460"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:elevation="4dp">
 
         <EditText
             android:id="@+id/urlInput"
             android:layout_width="0dp"
             android:layout_height="36dp"
             android:layout_weight="1"
-            android:hint="http://localhost:5000"
+            android:hint="http://127.0.0.1:5000"
             android:inputType="textUri"
             android:background="#1a1a2e"
             android:textColor="#e0e0e0"
+            android:textColorHint="#555"
             android:textSize="13sp"
             android:paddingHorizontal="8dp"
-            android:gravity="center_vertical" />
+            android:gravity="center_vertical"
+            android:singleLine="true" />
 
         <ImageButton
             android:id="@+id/goBtn"
@@ -37,8 +41,18 @@
             android:contentDescription="Ir" />
 
         <ImageButton
+            android:id="@+id/refreshBtn"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:scaleType="center"
+            android:background="@android:color/transparent"
+            android:tint="#e0e0e0"
+            android:contentDescription="Recargar" />
+
+        <ImageButton
             android:id="@+id/settingsBtn"
-            android:layout_width="40dp"
+            android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@android:drawable/ic_menu_manage"
             android:scaleType="center"
@@ -66,4 +80,14 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <TextView
+        android:id="@+id/statusBar"
+        android:layout_width="match_parent"
+        android:layout_height="20dp"
+        android:gravity="center"
+        android:textSize="10sp"
+        android:textColor="#666"
+        android:background="#0a0c12"
+        android:text="TechBot · Servidor local · 127.0.0.1:5000" />
 </LinearLayout>
