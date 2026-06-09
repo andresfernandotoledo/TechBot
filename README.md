@@ -1,7 +1,8 @@
 # TechBot
 
 Asistente técnico para redes, CCTV, control de acceso y sistemas.  
-Interfaz web responsiva — funciona en **PC (Windows/Linux)**, **Android (Termux)** y como **PWA instalable**.
+Interfaz web responsiva — funciona en las **4 plataformas**:  
+**PC (Windows/Linux)** · **macOS** · **Android (Termux)** · **APK Android (Chaquopy + WifiManager)**
 
 ---
 
@@ -47,6 +48,7 @@ Compilar: `cd android && ./build-apk.sh` (requiere Android SDK).
 - [Protocolos y Puertos](#protocolos-y-puertos)
 - [Calculadoras](#calculadoras)
 - [MAC Lookup](#mac-lookup)
+- [WiFi](#wifi)
 - [UPS / Zabbix](#ups--zabbix)
 - [Scripts Python](#scripts-python)
 - [PWA (App Instalable)](#pwa-app-instalable)
@@ -94,7 +96,8 @@ Sección **🧰 Herramientas** en el menú. Todas con Python estándar (sin bins
 
 ## Test de Velocidad
 
-Mide descarga, subida, ping, servidor e **IP pública** usando Ookla (`speedtest-cli`).  
+Mide descarga, subida, ping, servidor e **IP pública** usando **Python puro** (urllib + socket).  
+Sin dependencias externas — descarga archivos de prueba desde `speedtest.tele2.net`.  
 Se ejecuta en segundo plano — podés usar otras secciones mientras termina.  
 Guarda los últimos 10 resultados en el navegador.
 
@@ -131,7 +134,8 @@ Persistencia en archivos JSON.
 Editor visual de topología de red con **Cytoscape.js**.
 
 - **Manual**: agregar nodos (router, switch, firewall, servidor, PC, AP, cámara, NVR, DVR, nube, área) y conexiones (Ethernet, fibra, WiFi)
-- **Auto-descubrir**: a partir de una IP semilla + comunidad SNMP, descubre dispositivos por tabla ARP y LLDP
+- **Auto-descubrir**: escaneo TCP de toda la subred + tabla ARP por SNMP + cache ARP local (Linux/Android `/proc/net/arp`, Windows/macOS `arp -a`). Detecta tipo, vendor y modelo de cada dispositivo
+- **Iconos SVG inline**: representaciones reales de cada dispositivo (router con antenas, switch con puertos, cámara, servidor, etc.)
 - **Estado en vivo**: ping a cada nodo
 - **Simulador**: animación de paquetes ICMP
 - **Guardar / Cargar**: persistencia en JSON
@@ -233,12 +237,26 @@ Base de ~2500 OUI. Buscar por MAC o por nombre de fabricante.
 
 ---
 
-## UPS / Zabbix
+## WiFi
 
-- Monitoreo por **SNMP** (12 fabricantes), **NUT**, **Modbus TCP**, **PowerChute**, **apcupsd**, **pwrstat**
-- Detección automática del protocolo
-- Estimación de vida de batería
+Escáner WiFi multiplataforma:
+
+| Plataforma | Método |
+|-----------|--------|
+| **APK Android** | WifiManager nativo vía `TechBotBridge.java` (sin root) |
+| **Termux** | `termux-wifi-scaninfo` (API Termux) |
+| **Linux** | `iw` → `iwlist` (requiere `cap_net_admin`) |
+| **Windows** | `netsh wlan show networks mode=bssid` |
+| **macOS** | `airport` |
+
+Detección automática de interfaz + señal RSSI a porcentaje (0-100%) + conversión frecuencia→canal.
+
+---
+
+- Monitoreo UPS a través de **Zabbix API** (HTTP)
 - Integración con **Zabbix** (hosts, problemas, alertas por ntfy.sh)
+- Cliente NUT por TCP puro (puerto 3493, sin binarios)
+- Estimación de vida de batería
 
 ---
 
@@ -263,12 +281,13 @@ En Chrome Android: menú → "Agregar a pantalla de inicio".
 
 ## APK Android
 
-El directorio `android/` contiene un proyecto Android Studio.
+El directorio `android/` contiene un proyecto Android Studio con **Chaquopy** (Python embebido).
 
 **Características:**
 - WebView a pantalla completa con barra de URL
-- Deslizar para recargar
-- Cámara para lector QR
+- Servidor Flask embebido (Python vía Chaquopy)
+- **WifiManager nativo** vía `TechBotBridge.java` para scan WiFi sin root
+- **Cámara** para lector QR
 - URL configurable (localhost o servidor remoto)
 - Tema oscuro, orientación adaptable
 - Sin dependencias externas
@@ -292,11 +311,13 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ```txt
 flask>=3.0.0
 requests>=2.31.0
-speedtest-cli>=2.1.3
 ```
 
-Todo lo demás usa **librería estándar de Python** (socket, ssl, ipaddress, threading, json, etc.).  
-No requiere bins externos obligatorios — ping, dig, traceroute son opcionales.
+Todo lo demás usa **librería estándar de Python** (socket, ssl, ipaddress, threading, urllib, etc.).  
+No requiere bins externos obligatorios.
+
+**SNMP, Speedtest, NUT, DHCP, Traceroute** — implementaciones puras en Python (sin subprocess).  
+**WiFi** — WifiManager nativo (APK) + iw/iwlist (Linux) + netsh (Windows) + airport (macOS) + termux-api (Termux).
 
 ---
 
@@ -320,7 +341,9 @@ techbot/
   monitor.py           → Monitoreo continuo de subred
   tasks.py             → Tareas en segundo plano
   speedtest.py         → Test de velocidad
-  snmp/                → Operaciones SNMP
+  wifi.py              → Escáner WiFi (4 plataformas)
+  dhcp.py              → Descubrimiento DHCP
+  snmp/                → Operaciones SNMP (BER puro)
   ipam/                → Planificación IP
   topology/            → Editor de topología + auto-descubrimiento
   protocols/           → Base de protocolos y puertos

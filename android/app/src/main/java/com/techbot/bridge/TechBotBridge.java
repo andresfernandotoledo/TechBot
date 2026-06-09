@@ -38,32 +38,34 @@ public class TechBotBridge {
      */
     public static String wifiScan() {
         if (appContext == null) {
-            return "[]";
+            return "{\"error\":\"Bridge no inicializado. Llamar TechBotBridge.init() primero\"}";
         }
 
         try {
             WifiManager wifi = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
             if (wifi == null) {
-                return "[]";
+                return "{\"error\":\"WiFiManager no disponible\"}";
             }
 
-            // Verificar permiso (Android 13+ requiere ACCESS_FINE_LOCATION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!wifi.isWifiEnabled()) {
+                return "{\"error\":\"WiFi desactivado\"}";
+            }
+
+            // Verificar permiso ubicación (Android 10+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 if (ContextCompat.checkSelfPermission(appContext,
                         Manifest.permission.ACCESS_FINE_LOCATION)
                         != PackageManager.PERMISSION_GRANTED) {
-                    Log.w(TAG, "Sin permiso ACCESS_FINE_LOCATION para WiFi scan");
                     return "{\"error\":\"Permiso ACCESS_FINE_LOCATION requerido\"}";
                 }
             }
 
             boolean started = wifi.startScan();
             if (!started) {
-                return "{\"error\":\"WiFi scan no disponible\"}";
+                return "{\"error\":\"startScan() falló\"}";
             }
 
-            // Esperar resultados (máximo 3s)
-            try { Thread.sleep(1500); } catch (InterruptedException e) {}
+            try { Thread.sleep(2000); } catch (InterruptedException e) {}
 
             List<ScanResult> results = wifi.getScanResults();
             List<Map<String, Object>> networks = new ArrayList<>();
@@ -72,8 +74,11 @@ public class TechBotBridge {
                 Map<String, Object> net = new HashMap<>();
                 net.put("ssid", r.SSID != null ? r.SSID : "");
                 net.put("bssid", r.BSSID != null ? r.BSSID : "");
-                net.put("signal_pct", Math.max(0, Math.min(100, (r.level + 100) * 100 / 100)));
-                net.put("channel", r.frequency);
+                // signal: r.level es RSSI en dBm (-30 a -100)
+                int signal = Math.max(0, Math.min(100, (int)((r.level + 100) * 100 / 70)));
+                net.put("signal_pct", signal);
+                net.put("channel", freqToChannel(r.frequency));
+                net.put("frequency", r.frequency);
                 net.put("frequency_ghz", Math.round(r.frequency / 1000.0 * 100.0) / 100.0);
                 String caps = r.capabilities != null ? r.capabilities.toUpperCase() : "";
                 if (caps.contains("WPA2")) net.put("wpa", "WPA2");
@@ -143,6 +148,13 @@ public class TechBotBridge {
     }
 
     // ─── Utils ────────────────────────────────────────────────
+
+    private static int freqToChannel(int freq) {
+        if (freq >= 2412 && freq <= 2484) return (freq - 2412) / 5 + 1;
+        if (freq >= 5160 && freq <= 5885) return (freq - 5180) / 5 + 36;
+        if (freq >= 5955 && freq <= 7115) return (freq - 5950) / 5;
+        return 0;
+    }
 
     private static String mapToJson(Map<String, Object> map) {
         StringBuilder json = new StringBuilder("{");

@@ -7,37 +7,78 @@ import os
 import shutil
 
 OS = platform.system()
+_ANDROID = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ROOT' in os.environ
+
+
+def _is_termux():
+    return "com.termux" in os.environ.get("PREFIX", "") or os.path.exists("/data/data/com.termux")
+
 
 # ─── Android bridge (Chaquopy) ──────────────────────────────
-_ANDROID = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ROOT' in os.environ
-_techbot_bridge = None
 
 def _android_wifi_scan():
     """Usa TechBotBridge Java para WiFi scan nativo Android."""
-    global _techbot_bridge
     try:
         from com.techbot.bridge import TechBotBridge
-        _techbot_bridge = TechBotBridge
         result = TechBotBridge.wifiScan()
         data = json.loads(result)
         if isinstance(data, list):
             return data
+        if isinstance(data, dict) and "error" in data:
+            return None  # bridge returned error, fallback
         return None
-    except Exception as e:
+    except Exception:
         return None
+
 
 def _android_wifi_connection():
-    """Usa TechBotBridge Java para info de conexión WiFi."""
     try:
-        if _techbot_bridge is not None:
-            result = _techbot_bridge.wifiConnectionInfo()
-            return json.loads(result)
-    except:
-        pass
-    return None
+        from com.techbot.bridge import TechBotBridge
+        result = TechBotBridge.wifiConnectionInfo()
+        return json.loads(result)
+    except Exception:
+        return None
 
-def _is_termux():
-    return "com.termux" in os.environ.get("PREFIX", "") or os.path.exists("/data/data/com.termux")
+
+# ─── Termux API ─────────────────────────────────────────────
+
+def _termux_scan():
+    if not shutil.which("termux-wifi-scaninfo"):
+        return None
+    try:
+        result = subprocess.run(
+            ["termux-wifi-scaninfo"],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        data = json.loads(result.stdout)
+        networks = []
+        for net in data:
+            freq = net.get("frequency", 0) or 0
+            rssi = net.get("rssi", 0) or 0
+            networks.append({
+                "ssid": net.get("ssid", ""),
+                "bssid": net.get("bssid", ""),
+                "signal_pct": max(0, min(100, int((rssi + 100) * 100 / 70))),
+                "channel": _freq_to_channel(int(freq)) if freq else 0,
+                "frequency": int(freq) if freq else 0,
+                "frequency_ghz": round(int(freq) / 1000, 2) if freq else None,
+                "wpa": "WPA2" if "WPA2" in (net.get("capabilities", "") or "") else "WPA",
+                "encrypted": True,
+            })
+        return networks
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+
+
+# ─── Parser helpers ─────────────────────────────────────────
+
+def _freq_to_channel(freq):
+    if 2412 <= freq <= 2484: return (freq - 2412) // 5 + 1
+    if 5160 <= freq <= 5885: return (freq - 5180) // 5 + 36
+    if 5955 <= freq <= 7115: return (freq - 5950) // 5
+    return 0
 
 
 def _parse_iwlist(text):
@@ -52,17 +93,20 @@ def _parse_iwlist(text):
         m = re.search(r"Channel[ :]*(\d+)", block)
         if m: net["channel"] = int(m.group(1))
         m = re.search(r"Frequency[ :]*([\d.]+)", block)
-        if m: net["frequency_ghz"] = float(m.group(1))
+        if m:
+            freq = float(m.group(1))
+            net["frequency_ghz"] = freq
+            net["frequency"] = int(freq * 1000)
         m = re.search(r"Quality[= ](\d+)/?(\d*)", block)
         if m:
             sig = int(m.group(1))
             denom = int(m.group(2)) if m.group(2) else 100
             net["quality"] = f"{sig}/{denom}"
             net["signal_pct"] = round((sig / denom) * 100)
-        m = re.search(r"Encryption key[= ](\w+)", block)
-        if m: net["encrypted"] = m.group(1).lower() == "on"
         m = re.search(r"IE:.*WPA", block)
-        net["wpa"] = "WPA2" if "WPA2" in block else "WPA" if m else "Open" if not net.get("encrypted", True) else "WEP"
+        net["encrypted"] = "Encryption key:on" in block
+        wpa = "WPA2" if "WPA2" in block else "WPA" if "WPA" in block else "Open" if not net.get("encrypted", True) else "WEP"
+        net["wpa"] = wpa
         if net.get("ssid"):
             networks.append(net)
     return networks
@@ -82,11 +126,15 @@ def _parse_iw_scan(text):
             m = re.search(r"SSID: (.*)", line)
             if m: net["ssid"] = m.group(1).strip()
             m = re.search(r"freq: (\d+)", line)
-            if m: net["frequency_ghz"] = round(int(m.group(1)) / 1000, 2)
+            if m:
+                freq = int(m.group(1))
+                net["frequency"] = freq
+                net["frequency_ghz"] = round(freq / 1000, 2)
+                net["channel"] = _freq_to_channel(freq)
             m = re.search(r"signal: (-\d+)", line)
             if m:
                 sig = int(m.group(1))
-                net["signal_pct"] = max(0, min(100, round((sig + 100) * 1.25)))
+                net["signal_pct"] = max(0, min(100, int((sig + 100) * 100 / 70)))
             m = re.search(r"channel (\d+)", line)
             if m: net["channel"] = int(m.group(1))
             if "WPA" in line: net["wpa"] = "WPA"
@@ -114,13 +162,16 @@ def _parse_netsh(text):
             if len(parts) == 2: current["bssid"] = parts[1].strip()
         elif "Channel" in line and ":" in line:
             parts = line.split(":", 1)
-            if len(parts) == 2: current["channel"] = int(parts[1].strip())
+            if len(parts) == 2:
+                try: current["channel"] = int(parts[1].strip())
+                except: pass
         elif "Signal" in line and "%" in line:
             parts = line.split(":", 1)
             if len(parts) == 2:
-                pct = parts[1].strip().replace("%", "")
-                current["signal_pct"] = int(pct)
-                current["quality"] = f"{pct}/100"
+                try:
+                    pct = int(parts[1].strip().replace("%", ""))
+                    current["signal_pct"] = pct
+                except: pass
         elif "Radio type" in line and ":" in line:
             parts = line.split(":", 1)
             if len(parts) == 2:
@@ -137,173 +188,164 @@ def _parse_netsh(text):
     return networks
 
 
-def _termux_scan():
-    """Escanea WiFi usando termux-wifi-scaninfo (Termux API)."""
-    try:
-        # Check if termux-wifi-scaninfo is available
-        if not shutil.which("termux-wifi-scaninfo"):
-            return None
-        result = subprocess.run(
-            ["termux-wifi-scaninfo"],
-            capture_output=True, text=True, timeout=15
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return None
-        data = json.loads(result.stdout)
-        networks = []
-        for net in data:
+def _parse_airport(text):
+    networks = []
+    for line in text.strip().split("\n")[1:]:
+        parts = line.split()
+        if len(parts) >= 7:
+            ssid = " ".join(parts[:-6])
+            sig_raw = parts[-3]
+            try:
+                sig = int(sig_raw)
+                signal = max(0, min(100, int((sig + 100) * 100 / 70)))
+            except:
+                signal = 0
+            try:
+                ch = int(parts[-2])
+            except:
+                ch = 0
             networks.append({
-                "ssid": net.get("ssid", ""),
-                "bssid": net.get("bssid", ""),
-                "signal_pct": net.get("rssi", 0),
-                "channel": net.get("frequency", ""),
-                "frequency_ghz": round(net.get("frequency", 0) / 1000, 2) if net.get("frequency") else None,
-                "wpa": "WPA2" if net.get("capabilities", "").upper() == "WPA2" else "WPA",
-                "encrypted": True,
+                "ssid": ssid,
+                "bssid": parts[-6],
+                "signal_pct": signal,
+                "channel": ch,
+                "standard": parts[-1],
             })
-        return networks
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return None
+    return networks
 
+
+# ─── Main scan entry point ──────────────────────────────────
 
 def scan_wifi(interface=None):
-    """Escanea redes WiFi disponibles. Compatible con Linux, Windows, macOS, Termux y Android nativo."""
+    """Escanea redes WiFi en las 4 plataformas con fallbacks progresivos."""
+    result = {"networks": [], "count": 0}
+
     try:
-        # Prioridad 1: Android nativo (Chaquopy + WifiManager) — NO requiere root ni subprocess
+        # ── Android (Chaquopy APK) ──
         if _ANDROID:
             nets = _android_wifi_scan()
-            if nets is not None:
-                return {"networks": nets, "count": len(nets), "interface": "android-native", "method": "WifiManager"}
-            # Fallback a Termux API si no hay bridge
-            termux_nets = _termux_scan()
-            if termux_nets is not None:
-                return {"networks": termux_nets, "count": len(termux_nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
+            if nets is not None and len(nets) > 0:
+                return {**result, "networks": nets, "count": len(nets), "interface": "android-native", "method": "WifiManager"}
+            # bridge no disponible o sin redes → fallback
 
-        # Prioridad 2: Termux API (no requiere root)
-        if _is_termux() or OS == "Linux":
-            termux_nets = _termux_scan()
-            if termux_nets is not None:
-                return {"networks": termux_nets, "count": len(termux_nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
+        # ── Termux API ──
+        if _is_termux() or shutil.which("termux-wifi-scaninfo"):
+            nets = _termux_scan()
+            if nets is not None and len(nets) > 0:
+                return {**result, "networks": nets, "count": len(nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
 
+        # ── Linux: iw, luego iwlist (sin sudo) ──
         if OS == "Linux":
-            iface = interface or "wlan0"
-
-            # Prioridad 3: iw (mejor que iwlist, funciona en Android con root)
-            iw_path = shutil.which("iw")
-            if iw_path:
+            iface = interface or _detect_wifi_iface() or "wlan0"
+            iw = shutil.which("iw")
+            if iw:
                 try:
-                    result = subprocess.run(
-                        [iw_path, "dev", iface, "scan"],
-                        capture_output=True, text=True, timeout=15
-                    )
-                    if result.returncode == 0 and result.stdout:
-                        networks = _parse_iw_scan(result.stdout)
-                        return {"networks": networks, "count": len(networks), "interface": iface, "method": "iw"}
-                except:
-                    pass
-
-            # Prioridad 4: iwlist (Linux estándar)
-            iwlist_path = shutil.which("iwlist")
-            if iwlist_path:
+                    r = subprocess.run([iw, "dev", iface, "scan"], capture_output=True, text=True, timeout=15)
+                    if r.returncode == 0 and r.stdout:
+                        nets = _parse_iw_scan(r.stdout)
+                        if nets:
+                            return {**result, "networks": nets, "count": len(nets), "interface": iface, "method": "iw"}
+                except: pass
+            iwlist = shutil.which("iwlist")
+            if iwlist:
                 try:
-                    result = subprocess.run(
-                        [iwlist_path, iface, "scan"],
-                        capture_output=True, text=True, timeout=15
-                    )
-                    if result.returncode == 0 and result.stdout:
-                        networks = _parse_iwlist(result.stdout)
-                        return {"networks": networks, "count": len(networks), "interface": iface, "method": "iwlist"}
-                except:
-                    pass
+                    r = subprocess.run([iwlist, iface, "scan"], capture_output=True, text=True, timeout=15)
+                    if r.returncode == 0 and r.stdout:
+                        nets = _parse_iwlist(r.stdout)
+                        if nets:
+                            return {**result, "networks": nets, "count": len(nets), "interface": iface, "method": "iwlist"}
+                except: pass
+            return {**result, "error": "WiFi scan requiere 'iw' o 'iwlist' con permisos. En Termux: pkg install iw"}
 
-            # Intentar con sudo iwlist
-            try:
-                result = subprocess.run(
-                    ["sudo", iwlist_path or "iwlist", iface, "scan"],
-                    capture_output=True, text=True, timeout=15
-                )
-                if result.returncode == 0 and result.stdout:
-                    networks = _parse_iwlist(result.stdout)
-                    return {"networks": networks, "count": len(networks), "interface": iface, "method": "sudo-iwlist"}
-            except:
-                pass
+        # ── Windows: netsh ──
+        if OS == "Windows":
+            r = subprocess.run(["netsh", "wlan", "show", "networks", "mode=bssid"],
+                               capture_output=True, text=True, timeout=15)
+            if r.returncode == 0 and r.stdout:
+                nets = _parse_netsh(r.stdout)
+                return {**result, "networks": nets, "count": len(nets), "interface": "wlan", "method": "netsh"}
+            return {**result, "error": "netsh: " + (r.stderr[:200] or "Sin redes disponibles")}
 
-            return {"error": f"No se pudo escanear. Instalá 'iw' o 'iwlist' (Termux: pkg install iw)", "networks": [], "count": 0}
+        # ── macOS: airport ──
+        if OS == "Darwin":
+            airport = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+            if os.path.exists(airport):
+                r = subprocess.run([airport, "-s"], capture_output=True, text=True, timeout=15)
+                if r.returncode == 0 and r.stdout:
+                    nets = _parse_airport(r.stdout)
+                    return {**result, "networks": nets, "count": len(nets), "interface": "airport", "method": "airport"}
+            return {**result, "error": "airport no disponible"}
 
-        elif OS == "Windows":
-            result = subprocess.run(
-                ["netsh", "wlan", "show", "networks", "mode=bssid"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0:
-                networks = _parse_netsh(result.stdout)
-                return {"networks": networks, "count": len(networks), "interface": "wlan", "method": "netsh"}
-            return {"error": f"Error netsh: {result.stderr[:200]}", "networks": [], "count": 0}
-
-        elif OS == "Darwin":
-            result = subprocess.run(
-                ["/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-s"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0:
-                networks = []
-                for line in result.stdout.strip().split("\n")[1:]:
-                    parts = line.split()
-                    if len(parts) >= 7:
-                        networks.append({
-                            "ssid": " ".join(parts[:-6]),
-                            "bssid": parts[-6],
-                            "signal_pct": min(100, max(0, int(parts[-3]) + 100)) if parts[-3].lstrip("-").isdigit() else 0,
-                            "channel": parts[-2],
-                            "standard": parts[-1],
-                        })
-                return {"networks": networks, "count": len(networks), "interface": "airport", "method": "airport"}
-            return {"error": "airport no disponible", "networks": [], "count": 0}
-        else:
-            return {"error": f"Sistema no soportado: {OS}", "networks": [], "count": 0}
+        return {**result, "error": f"Sistema no soportado: {OS}"}
 
     except FileNotFoundError:
-        return {"error": "Comando WiFi no encontrado. En Termux: pkg install iw termux-api", "networks": [], "count": 0}
+        return {**result, "error": "Comando WiFi no encontrado"}
     except subprocess.TimeoutExpired:
-        return {"error": "Tiempo de espera agotado", "networks": [], "count": 0}
+        return {**result, "error": "Tiempo de espera agotado"}
     except Exception as e:
-        return {"error": str(e), "networks": [], "count": 0}
+        return {**result, "error": str(e)}
 
+
+def _detect_wifi_iface():
+    try:
+        r = subprocess.run(["iw", "dev"], capture_output=True, text=True, timeout=5)
+        for m in re.finditer(r"Interface\s+(\w+)", r.stdout):
+            return m.group(1)
+    except: pass
+    try:
+        r = subprocess.run(["iwconfig"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.split("\n"):
+            if "IEEE 802.11" in line:
+                return line.split()[0]
+    except: pass
+    return None
+
+
+# ─── Interface info ─────────────────────────────────────────
 
 def interface_info():
-    """Obtiene información de interfaces de red."""
+    """Obtiene información de interfaces WiFi."""
     try:
+        if _ANDROID:
+            info = _android_wifi_connection()
+            if info and "ssid" in info:
+                return {"interfaces": [info]}
+
         if _is_termux():
             try:
-                result = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and result.stdout.strip():
-                    return {"interfaces": [json.loads(result.stdout)]}
-            except:
-                pass
+                r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=5)
+                if r.returncode == 0 and r.stdout.strip():
+                    return {"interfaces": [json.loads(r.stdout)]}
+            except: pass
 
         if OS == "Linux":
-            result = subprocess.run(["iwconfig"], capture_output=True, text=True, timeout=5)
-            interfaces = []
-            if result.returncode == 0:
-                for block in result.stdout.strip().split("\n\n"):
+            iface = _detect_wifi_iface()
+            if iface:
+                r = subprocess.run(["iwconfig"], capture_output=True, text=True, timeout=5)
+                interfaces = []
+                for block in r.stdout.strip().split("\n\n"):
                     if not block.strip(): continue
                     lines = block.split("\n")
-                    iface = {"name": lines[0].split()[0] if lines else "?"}
+                    i = {"name": lines[0].split()[0] if lines else "?"}
                     for line in lines:
                         m = re.search(r'ESSID:"([^"]*)"', line)
-                        if m: iface["ssid"] = m.group(1)
+                        if m: i["ssid"] = m.group(1)
                         m = re.search(r"Frequency[= :]*([\d.]+)", line)
-                        if m: iface["frequency"] = float(m.group(1))
+                        if m: i["frequency"] = float(m.group(1))
                         m = re.search(r"Mode[=:](\w+)", line)
-                        if m: iface["mode"] = m.group(1)
+                        if m: i["mode"] = m.group(1)
                         m = re.search(r"Quality[= ](\d+)/(\d+)", line)
-                        if m: iface["quality"] = f"{m.group(1)}/{m.group(2)}"
-                    interfaces.append(iface)
-            return {"interfaces": interfaces}
+                        if m: i["quality"] = f"{m.group(1)}/{m.group(2)}"
+                    interfaces.append(i)
+                return {"interfaces": interfaces}
         elif OS == "Windows":
-            result = subprocess.run(["netsh", "wlan", "show", "interfaces"], capture_output=True, text=True, timeout=5)
-            return {"raw": result.stdout[:500]} if result.stdout else {"error": "No info"}
-        else:
-            return {"error": f"No soportado en {OS}"}
+            r = subprocess.run(["netsh", "wlan", "show", "interfaces"], capture_output=True, text=True, timeout=5)
+            return {"raw": r.stdout[:500]} if r.stdout else {"error": "No info"}
+        elif OS == "Darwin":
+            airport = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+            if os.path.exists(airport):
+                r = subprocess.run([airport, "-I"], capture_output=True, text=True, timeout=5)
+                return {"raw": r.stdout[:500]} if r.stdout else {"error": "No info"}
+        return {"error": f"No soportado en {OS}"}
     except Exception as e:
         return {"error": str(e)}
