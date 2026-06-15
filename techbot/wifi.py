@@ -57,7 +57,7 @@ def _termux_scan():
     try:
         result = subprocess.run(
             ["termux-wifi-scaninfo"],
-            capture_output=True, text=True, timeout=15
+            capture_output=True, text=True,             timeout=60
         )
         if result.returncode != 0:
             return {"error": result.stderr.strip() or f"código {result.returncode}"}
