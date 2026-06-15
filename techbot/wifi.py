@@ -51,25 +51,9 @@ def _android_wifi_connection():
 
 # ─── Termux API ─────────────────────────────────────────────
 
-def _termux_api_available():
-    """Verifica rápido si Termux:API responde (3s timeout)."""
-    cmd = shutil.which("termux-wifi-scaninfo")
-    if not cmd:
-        return False
-    try:
-        subprocess.run([cmd], capture_output=True, text=True, timeout=3)
-        return True
-    except subprocess.TimeoutExpired:
-        return False
-    except Exception:
-        return False
-
-
 def _termux_scan():
     if not shutil.which("termux-wifi-scaninfo"):
         return None
-    if not _termux_api_available():
-        return {"error": "Termux:API no responde. Instalá la app Termux:API desde F-Droid (no Google Play) y concedé permiso de ubicación."}
     try:
         result = subprocess.run(
             ["termux-wifi-scaninfo"],
@@ -360,8 +344,6 @@ def interface_info():
         if _is_termux():
             if not shutil.which("termux-wifi-connectioninfo"):
                 return {"error": "Instalá Termux:API: pkg install termux-api"}
-            if not _termux_api_available():
-                return {"error": "Termux:API no responde. Instalá la app Termux:API desde F-Droid."}
             try:
                 r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=15)
                 if r.returncode == 0 and r.stdout.strip():
