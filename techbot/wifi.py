@@ -8,6 +8,7 @@ import shutil
 
 OS = platform.system()
 _ANDROID = hasattr(sys, 'getandroidapilevel')  # Solo True en Chaquopy (APK). En Termux es False.
+_android_last_error = None
 
 
 def _is_termux():
@@ -18,6 +19,8 @@ def _is_termux():
 
 def _android_wifi_scan():
     """Usa TechBotBridge Java para WiFi scan nativo Android."""
+    global _android_last_error
+    _android_last_error = None
     try:
         from com.techbot.bridge import TechBotBridge
         result = TechBotBridge.wifiScan()
@@ -25,10 +28,16 @@ def _android_wifi_scan():
         if isinstance(data, list):
             return data
         if isinstance(data, dict) and "error" in data:
-            return None  # bridge returned error, fallback
+            _android_last_error = data["error"]
+            return None
         return None
-    except Exception:
+    except Exception as e:
+        _android_last_error = str(e)
         return None
+
+
+def _android_wifi_error():
+    return _android_last_error
 
 
 def _android_wifi_connection():
@@ -50,11 +59,19 @@ def _termux_scan():
             ["termux-wifi-scaninfo"],
             capture_output=True, text=True, timeout=15
         )
-        if result.returncode != 0 or not result.stdout.strip():
-            return None
+        if result.returncode != 0:
+            return {"error": result.stderr.strip() or f"código {result.returncode}"}
+        if not result.stdout.strip():
+            return {"error": "termux-wifi-scaninfo no devolvió datos"}
         data = json.loads(result.stdout)
+        if isinstance(data, dict) and "error" in data:
+            return {"error": data["error"]}
+        if not isinstance(data, list):
+            return {"error": "formato inesperado"}
         networks = []
         for net in data:
+            if not net.get("ssid"):
+                continue
             freq = net.get("frequency", 0) or 0
             rssi = net.get("rssi", 0) or 0
             networks.append({
@@ -68,8 +85,10 @@ def _termux_scan():
                 "encrypted": True,
             })
         return networks
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return None
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return {"error": str(e)}
+    except json.JSONDecodeError as e:
+        return {"error": f"JSON inválido: {e}"}
 
 
 # ─── Parser helpers ─────────────────────────────────────────
@@ -226,14 +245,22 @@ def scan_wifi(interface=None):
             nets = _android_wifi_scan()
             if nets is not None and len(nets) > 0:
                 return {**result, "networks": nets, "count": len(nets), "interface": "android-native", "method": "WifiManager"}
-            # bridge no disponible o sin redes → fallback
+            # Si el bridge devolvió error, mostrarlo
+            err = _android_wifi_error()
+            if err:
+                return {**result, "error": err}
+            return {**result, "error": "Bridge WiFi no disponible. Verificar permisos de ubicación y WiFi encendido."}
 
         # ── Termux API ──
         if _is_termux():
             if shutil.which("termux-wifi-scaninfo"):
                 nets = _termux_scan()
+                if isinstance(nets, dict) and "error" in nets:
+                    return {**result, "error": nets["error"]}
                 if nets is not None and len(nets) > 0:
                     return {**result, "networks": nets, "count": len(nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
+                # termux API instalado pero no devolvió redes → error específico
+                return {**result, "error": "termux-wifi-scaninfo no devolvió redes. Verificar WiFi encendido y permiso de ubicación para Termux."}
             # Termux sin termux-api instalado
             if shutil.which("iw") or shutil.which("iwlist"):
                 pass  # probar iw/iwlist abajo
@@ -241,7 +268,7 @@ def scan_wifi(interface=None):
                 return {**result, "error": "Instalá Termux:API: pkg install termux-api && termux-wifi-scaninfo"}
 
         # ── Linux: iw, luego iwlist (sin sudo) ──
-        if OS == "Linux":
+        if OS == "Linux" and not _ANDROID:
             iface = interface or _detect_wifi_iface() or "wlan0"
             iw = shutil.which("iw")
             if iw:

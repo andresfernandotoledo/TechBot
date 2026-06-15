@@ -1999,11 +1999,14 @@ function showTools() {
 
     <div class="section-header" style="margin-top:12px">📷 QR Scanner</div>
     <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
-      <p class="text-sm text-muted mb-8">Escaneá un código QR para auto-completar IP, MAC o URL</p>
-      <button class="btn" onclick="qrStart()">📷 Abrir Cámara</button>
+      <p class="text-sm text-muted mb-8">Escaneá un QR para auto-completar IP, MAC o URL</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+        <button class="btn" onclick="qrStart()">📷 Cámara</button>
+        <label class="btn btn-outline" style="cursor:pointer">🖼️ Subir foto<input type="file" accept="image/*" capture="environment" style="display:none" id="qrFileInput" onchange="qrFromFile(this)"></label>
+      </div>
       <button class="btn btn-outline" onclick="qrStop()" style="display:none" id="qrStopBtn">✕ Cerrar</button>
       <div id="qrReader" style="display:none;margin-top:8px">
-        <video id="qrVideo" style="width:100%;max-width:360px;border-radius:8px;background:#000" playsinline></video>
+        <video id="qrVideo" style="width:100%;max-width:360px;border-radius:8px;background:#000" playsinline muted></video>
         <canvas id="qrCanvas" style="display:none"></canvas>
         <div id="qrResult" class="text-sm text-muted" style="margin-top:6px"></div>
       </div>
@@ -2078,7 +2081,32 @@ function showTools() {
 let qrStream = null;
 let qrInterval = null;
 
+function qrDecode(imageData, resultEl) {
+  if (typeof jsQR !== "function") {
+    resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Librería jsQR no cargada. Verificar conexión a internet.</span>";
+    return null;
+  }
+  const code = jsQR(imageData.data, imageData.width, imageData.height);
+  if (code) {
+    const val = code.data;
+    resultEl.innerHTML = `<span style='color:var(--success)'>✅ QR: ${escapeHtml(val)}</span>`;
+    qrStop();
+    fillQRValue(val);
+    return val;
+  }
+  return null;
+}
+
 function qrStart() {
+  const resultEl = document.getElementById("qrResult");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ Cámara no disponible en este navegador. Probá con 'Subir foto'.</span>";
+    return;
+  }
+  if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ La cámara requiere HTTPS. Usá localhost o subí una foto.</span>";
+    return;
+  }
   const reader = document.getElementById("qrReader");
   const stopBtn = document.getElementById("qrStopBtn");
   const video = document.getElementById("qrVideo");
@@ -2086,26 +2114,29 @@ function qrStart() {
   const ctx = canvas.getContext("2d");
   reader.style.display = "block";
   stopBtn.style.display = "inline-block";
+  resultEl.innerHTML = "<span class='text-muted'>Solicitando cámara...</span>";
   navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}).then(stream => {
     qrStream = stream;
     video.srcObject = stream;
-    video.play();
+    resultEl.innerHTML = "<span class='text-muted'>Enfocá el QR...</span>";
+    video.play().catch(() => {});
     qrInterval = setInterval(() => {
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      if (video.readyState < video.HAVE_CURRENT_DATA) return;
+      if (video.videoWidth === 0 || video.videoHeight === 0) return;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code) {
-        const val = code.data;
-        document.getElementById("qrResult").innerHTML = `<span style='color:var(--success)'>✅ QR detectado: ${escapeHtml(val)}</span>`;
-        qrStop();
-        fillQRValue(val);
-      }
+      qrDecode(imageData, resultEl);
     }, 500);
   }).catch(e => {
-    document.getElementById("qrResult").innerHTML = `<span style='color:var(--danger)'>❌ Error: ${escapeHtml(e.message)}</span>`;
+    const msg = e.message || e.name || "";
+    if (msg.includes("NotAllowed") || msg.includes("Permission"))
+      resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Permiso de cámara denegado. Concedelo en los ajustes del navegador.</span>";
+    else if (msg.includes("NotFound"))
+      resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ No se encontró cámara. Probá con 'Subir foto'.</span>";
+    else
+      resultEl.innerHTML = `<span style='color:var(--danger)'>❌ ${escapeHtml(msg)}</span>`;
   });
 }
 
@@ -2115,6 +2146,31 @@ function qrStop() {
   document.getElementById("qrReader").style.display = "none";
   document.getElementById("qrStopBtn").style.display = "none";
   document.getElementById("qrResult").innerHTML = "";
+}
+
+function qrFromFile(input) {
+  const resultEl = document.getElementById("qrResult");
+  const reader = document.getElementById("qrReader");
+  reader.style.display = "block";
+  resultEl.innerHTML = "<span class='text-muted'>Decodificando QR...</span>";
+  const file = input.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.getElementById("qrCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    if (!qrDecode(imageData, resultEl))
+      resultEl.innerHTML = "<span class='text-muted'>No se detectó QR en la imagen</span>";
+  };
+  img.onerror = () => {
+    resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Error al cargar la imagen</span>";
+  };
+  img.src = URL.createObjectURL(file);
+  input.value = "";
 }
 
 function fillQRValue(val) {
