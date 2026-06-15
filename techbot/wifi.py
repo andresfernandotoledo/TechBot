@@ -240,18 +240,7 @@ def scan_wifi(interface=None):
     result = {"networks": [], "count": 0}
 
     try:
-        # ── Android (Chaquopy APK) ──
-        if _ANDROID:
-            nets = _android_wifi_scan()
-            if nets is not None and len(nets) > 0:
-                return {**result, "networks": nets, "count": len(nets), "interface": "android-native", "method": "WifiManager"}
-            # Si el bridge devolvió error, mostrarlo
-            err = _android_wifi_error()
-            if err:
-                return {**result, "error": err}
-            return {**result, "error": "Bridge WiFi no disponible. Verificar permisos de ubicación y WiFi encendido."}
-
-        # ── Termux API ──
+        # ── Termux API (siempre primero, detección más fiable) ──
         if _is_termux():
             if shutil.which("termux-wifi-scaninfo"):
                 nets = _termux_scan()
@@ -266,6 +255,17 @@ def scan_wifi(interface=None):
                 pass  # probar iw/iwlist abajo
             else:
                 return {**result, "error": "Instalá Termux:API: pkg install termux-api && termux-wifi-scaninfo"}
+
+        # ── Android (Chaquopy APK) ──
+        if _ANDROID and not _is_termux():
+            nets = _android_wifi_scan()
+            if nets is not None and len(nets) > 0:
+                return {**result, "networks": nets, "count": len(nets), "interface": "android-native", "method": "WifiManager"}
+            # Si el bridge devolvió error, mostrarlo
+            err = _android_wifi_error()
+            if err:
+                return {**result, "error": err}
+            return {**result, "error": "Bridge WiFi no disponible. Verificar permisos de ubicación y WiFi encendido."}
 
         # ── Linux: iw, luego iwlist (sin sudo) ──
         if OS == "Linux" and not _ANDROID:
@@ -339,17 +339,17 @@ def _detect_wifi_iface():
 def interface_info():
     """Obtiene información de interfaces WiFi."""
     try:
-        if _ANDROID:
-            info = _android_wifi_connection()
-            if info and "ssid" in info:
-                return {"interfaces": [info]}
-
         if _is_termux():
             try:
                 r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=5)
                 if r.returncode == 0 and r.stdout.strip():
                     return {"interfaces": [json.loads(r.stdout)]}
             except: pass
+
+        if _ANDROID and not _is_termux():
+            info = _android_wifi_connection()
+            if info and "ssid" in info:
+                return {"interfaces": [info]}
 
         if OS == "Linux":
             iface = _detect_wifi_iface()
