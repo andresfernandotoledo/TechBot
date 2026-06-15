@@ -2504,9 +2504,15 @@ async function wifiInterfaces() {
     let html = `<div class='result-box' style='max-height:none'>`;
     if (r.interfaces) {
       r.interfaces.forEach(iface => {
+        const name = iface.name || iface.ssid || iface.bssid || `WiFi`;
         html += `<div class='cmd-item'>
-          <strong>${escapeHtml(iface.name)}</strong>
+          <strong>${escapeHtml(name)}</strong>
           ${iface.ssid ? `<span class='text-xs'>SSID: ${escapeHtml(iface.ssid)}</span>` : ""}
+          ${iface.bssid ? `<span class='text-xs'>BSSID: ${escapeHtml(iface.bssid)}</span>` : ""}
+          ${iface.rssi ? `<span class='text-xs'>Señal: ${iface.rssi} dBm</span>` : ""}
+          ${iface.frequency ? `<span class='text-xs'>Freq: ${iface.frequency} MHz</span>` : ""}
+          ${iface.link_speed || iface.speed_mbps ? `<span class='text-xs'>Vel: ${iface.link_speed || iface.speed_mbps} Mbps</span>` : ""}
+          ${iface.ip_address ? `<span class='text-xs'>IP: ${escapeHtml(iface.ip_address)}</span>` : ""}
           ${iface.mode ? `<span class='text-xs'>Modo: ${iface.mode}</span>` : ""}
           ${iface.quality ? `<span class='text-xs'>Calidad: ${iface.quality}</span>` : ""}
         </div>`;

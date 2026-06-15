@@ -69,21 +69,29 @@ def _termux_scan():
         if not isinstance(data, list):
             return {"error": "formato inesperado"}
         networks = []
+        all_hidden = True
         for net in data:
-            if not net.get("ssid"):
-                continue
+            ssid = net.get("ssid") or ""
+            if ssid and ssid != "<unknown ssid>":
+                all_hidden = False
+            else:
+                ssid = "<hidden>"
             freq = net.get("frequency", 0) or 0
             rssi = net.get("rssi", 0) or 0
+            bssid = net.get("bssid") or net.get("macAddress") or ""
+            caps = net.get("capabilities") or ""
             networks.append({
-                "ssid": net.get("ssid", ""),
-                "bssid": net.get("bssid", ""),
+                "ssid": ssid,
+                "bssid": bssid,
                 "signal_pct": max(0, min(100, int((rssi + 100) * 100 / 70))),
                 "channel": _freq_to_channel(int(freq)) if freq else 0,
                 "frequency": int(freq) if freq else 0,
                 "frequency_ghz": round(int(freq) / 1000, 2) if freq else None,
-                "wpa": "WPA2" if "WPA2" in (net.get("capabilities", "") or "") else "WPA",
-                "encrypted": True,
+                "wpa": "WPA2" if "WPA2" in caps else "WPA" if "WPA" in caps else "WEP" if "WEP" in caps else "Open",
+                "encrypted": bool(caps and caps not in ("", "[]") and "ESS" not in caps),
             })
+        if networks and all_hidden:
+            return {"error": "Android bloquea los SSID sin permiso de ubicación. Activá Ubicación en Ajustes y concedé permiso a Termux."}
         return networks
     except FileNotFoundError:
         return {"error": "Comando no encontrado: termux-wifi-scaninfo"}
@@ -350,6 +358,8 @@ def interface_info():
                     data = json.loads(r.stdout)
                     if isinstance(data, dict) and "error" in data:
                         return {"error": data["error"]}
+                    if data.get("ssid") in (None, "", "<unknown ssid>"):
+                        return {"error": "No se puede leer SSID. Concedé permiso de ubicación a Termux (Ajustes > Apps > Termux > Permisos > Ubicación)."}
                     return {"interfaces": [data]}
                 if r.stderr.strip():
                     return {"error": r.stderr.strip()}
