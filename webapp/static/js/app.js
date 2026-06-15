@@ -2681,9 +2681,11 @@ function showSNMP() {
       <button class='tab' onclick='snmpInterfaces(this)'>🔌 Interfaces</button>
       <button class='tab' onclick='snmpDetectDevice(this)'>📷 CCTV/AC</button>
       <button class='tab' onclick='snmpWalk(this)'>🌲 Walk</button>
+      <button class='tab' onclick='snmpShowMibs(this)'>📚 MIBs</button>
     </div>
     <div id='snmpResult'></div>
   `;
+  snmpShowMibs(document.querySelector("#results .tab:last-child"));
 }
 
 function snmpCheck(btn) {
@@ -2737,6 +2739,56 @@ function snmpWalk(btn) {
       return `<div class='result-box'>${txt}</div>`;
     }
   );
+}
+
+function snmpShowMibs(btn) {
+  if (btn) {
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    btn.classList.add("active");
+  }
+  const el = document.getElementById("snmpResult");
+  el.innerHTML = "<div class='skeleton skeleton-card'></div>";
+  fetch("/api/snmp/info").then(r=>r.json()).then(data => {
+    let html = `<div style="margin-bottom:8px;color:var(--text2);font-size:13px">${data.howto}</div>`;
+    html += "<div style='overflow-x:auto'><table class='dhcp-table'><thead><tr><th>MIB</th><th>OID</th><th>Resultado</th></tr></thead><tbody>";
+    const h = document.getElementById("snmp_host").value;
+    for (const [name, oid] of Object.entries(data.mibs)) {
+      html += `<tr class='mib-row' onclick='snmpMibQuery("${oid}", this)'>
+        <td><strong>${escapeHtml(name)}</strong></td>
+        <td style='font-family:monospace;font-size:12px'>${escapeHtml(oid)}</td>
+        <td class='mib-result' id='mib_${name.replace(/\./g,'_')}'><span style='color:var(--text2);font-size:12px'>${h ? "🔄" : "—"}</span></td>
+      </tr>`;
+    }
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  }).catch(e => el.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`);
+}
+
+function snmpMibQuery(oid, row) {
+  const h = document.getElementById("snmp_host").value;
+  const c = document.getElementById("snmp_comm").value;
+  if (!h) return;
+  const td = row.querySelector(".mib-result");
+  td.innerHTML = "<span style='color:var(--accent)'>consultando…</span>";
+  const name = row.cells[0].textContent.trim();
+
+  if (oid.endsWith(".0")) {
+    fetch(`/api/snmp/get?host=${encodeURIComponent(h)}&community=${encodeURIComponent(c)}&oid=${encodeURIComponent(oid)}`)
+      .then(r=>r.json()).then(r => {
+        const v = r.error ? `<span style="color:var(--danger)">${escapeHtml(r.error)}</span>` : escapeHtml(JSON.stringify(r));
+        td.innerHTML = `<code style='font-size:12px'>${v}</code>`;
+      }).catch(e => td.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message)}</span>`);
+  } else {
+    fetch(`/api/snmp/walk?host=${encodeURIComponent(h)}&community=${encodeURIComponent(c)}&oid=${encodeURIComponent(oid)}`)
+      .then(r=>r.json()).then(r => {
+        if (r.error) { td.innerHTML = `<span style="color:var(--danger)">${escapeHtml(r.error)}</span>`; return; }
+        const entries = Object.entries(r).slice(0, 5);
+        if (entries.length === 0) { td.innerHTML = "<span style='color:var(--text2)'>sin resultados</span>"; return; }
+        let html = entries.map(([k,v]) => `<div style='font-size:11px;line-height:1.4'><code>…${k.slice(-20)}</code> = <strong>${escapeHtml(String(v).slice(0, 40))}</strong></div>`).join("");
+        if (Object.keys(r).length > 5) html += `<div style='font-size:11px;color:var(--text2)'>…+${Object.keys(r).length - 5} más</div>`;
+        td.innerHTML = html;
+      }).catch(e => td.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message)}</span>`);
+  }
 }
 
 // ─── TOPOLOGÍA ───────────────────────────────────────────────

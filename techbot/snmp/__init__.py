@@ -1,9 +1,9 @@
 # techbot/snmp/__init__.py
 # Pure-Python SNMP v1/v2c implementation with subprocess fallback
 
-import os
 import socket
 import time
+import threading
 
 from .ber import *
 
@@ -41,63 +41,50 @@ def snmp_check(host, community="public", timeout=2):
         return False
 
 
+def _extract_field_index(oid_str, base_oid):
+    """Extrae (campo, índice) de un OID tipo .1.3.6.1.2.1.2.2.1.<campo>.<índice>."""
+    suffix = oid_str.replace(base_oid.rstrip("."), "").strip(".")
+    parts = suffix.split(".") if suffix else []
+    if len(parts) >= 2:
+        try:
+            return int(parts[0]), int(parts[-1])
+        except ValueError:
+            pass
+    elif len(parts) == 1 and parts[0].isdigit():
+        return int(parts[0]), 0
+    return None, None
+
+
 def get_interfaces(host, community="public", timeout=3):
     oid_iface = "1.3.6.1.2.1.2.2.1"
     walk_raw = _pure_walk(host, oid_iface, community, port=161, timeout=timeout)
-    # Group by ifIndex: .1 = descr, .2 = type, .3 = mtu, .4 = speed,
-    # .5 = physaddr, .6 = admin, .7 = oper, .8 = lastchange, .10 = inOctets, .16 = outOctets
     ifaces = {}
     for oid_str, raw_val in walk_raw:
-        parts = oid_str.split(".")
-        if len(parts) < 2:
+        field, idx = _extract_field_index(oid_str, oid_iface)
+        if field is None:
             continue
-        try:
-            last = int(parts[-1])
-        except ValueError:
-            continue
-        try:
-            idx = int(parts[-2])
-        except (ValueError, IndexError):
-            # OID format: ...1.2.1.2.2.1.<field>.<index>
-            # Find the index by looking at last part if the one before is 1-20
-            if len(parts) >= 2 and parts[-2].isdigit():
-                field = int(parts[-2])
-                idx = last
-            else:
-                continue
-        # Determine field from OID
-        oid_suffix = oid_str.replace(oid_iface, "").strip(".")
-        field_parts = oid_suffix.split(".")
-        if len(field_parts) == 2:
-            try:
-                field = int(field_parts[0])
-                idx = int(field_parts[1])
-            except ValueError:
-                continue
-        elif len(field_parts) >= 1:
-            try:
-                field = int(field_parts[0])
-                idx = int(field_parts[-1])
-            except ValueError:
-                continue
-        else:
-            continue
-
         if idx not in ifaces:
-            ifaces[idx] = {"index": idx, "description": "", "type": "", "mtu": 0, "speed": 0, "mac": "", "admin": "down", "oper": "down"}
+            ifaces[idx] = {"index": idx, "description": "", "type": "", "mtu": 0, "speed": 0, "mac": "", "admin": "down", "oper": "down", "in_octets": 0, "out_octets": 0}
 
         v = _format_value(raw_val)
-        # MIB-II ifTable: .1=descr, .2=type, .3=mtu, .4=speed, .6=admin, .7=oper
         if field == 1:
             ifaces[idx]["description"] = str(v) if v else ""
+        elif field == 2:
+            ifaces[idx]["type"] = int(v) if isinstance(v, (int, float)) else 0
+        elif field == 3:
+            ifaces[idx]["mtu"] = int(v) if isinstance(v, (int, float)) else 0
         elif field == 4:
-            ifaces[idx]["speed"] = int(v) if v else 0
+            ifaces[idx]["speed"] = int(v) if isinstance(v, (int, float)) else 0
+        elif field == 5:
+            ifaces[idx]["mac"] = str(v) if v else ""
         elif field == 6:
             ifaces[idx]["admin"] = "up" if v == 1 else "down"
         elif field == 7:
             ifaces[idx]["oper"] = "up" if v == 1 else "down"
-        elif field == 5:
-            ifaces[idx]["mac"] = v if v else ""
+        elif field == 10:
+            ifaces[idx]["in_octets"] = int(v) if isinstance(v, (int, float)) else 0
+        elif field == 16:
+            ifaces[idx]["out_octets"] = int(v) if isinstance(v, (int, float)) else 0
 
     result = []
     for idx in sorted(ifaces.keys()):
@@ -214,7 +201,9 @@ def _pure_walk(host, base_oid, community, version=1, port=161, timeout=_DEFAULT_
     """Returns [(oid_str, raw_value_bytes), ...]."""
     results = []
     oid = base_oid.rstrip(".")
-    for _ in range(200):
+    base = base_oid.rstrip(".")
+    max_iters = 500
+    for _ in range(max_iters):
         try:
             oid_val = _pure_getnext(host, oid, community, version, port, timeout)
         except:
@@ -222,24 +211,27 @@ def _pure_walk(host, base_oid, community, version=1, port=161, timeout=_DEFAULT_
         if oid_val is None:
             break
         next_oid, value = oid_val
-        if not next_oid.startswith(base_oid.rstrip(".")):
+        if not next_oid.startswith(base):
             break
         if len(results) > 0 and next_oid == results[-1][0]:
             break
         results.append((next_oid, value))
         oid = next_oid
+        time.sleep(0.05)
     return results
 
 
 # ─── Low-level helpers ──────────────────────────────────────
 
 _request_counter = 0
+_rid_lock = threading.Lock()
 
 
 def _request_id():
     global _request_counter
-    _request_counter = (_request_counter + 1) & 0x7FFFFFFF
-    return _request_counter
+    with _rid_lock:
+        _request_counter = (_request_counter + 1) & 0x7FFFFFFF
+        return _request_counter
 
 
 def _udp_send_recv(host, port, data, timeout):
@@ -259,14 +251,6 @@ def _udp_send_recv(host, port, data, timeout):
 
 # ─── Build SNMP messages ────────────────────────────────────
 
-def _build_header(community, version, request_id, pdu_type):
-    ver_bytes = encode_int(version)
-    comm_bytes = encode_octet_string(community.encode())
-    pdu = _build_pdu(pdu_type, request_id, 0, 0, b"")
-    inner = ver_bytes + comm_bytes + pdu
-    return encode_sequence(inner)
-
-
 def _build_get_request(oid, community, version, request_id):
     pdu = _build_pdu(
         ASN1_CONTEXT | 0x00,
@@ -282,17 +266,6 @@ def _build_getnext_request(oid, community, version, request_id):
     pdu = _build_pdu(
         ASN1_CONTEXT | 0x01,
         request_id, 0, 0,
-        encode_sequence(encode_varbind(oid, encode_null()))
-    )
-    ver = encode_int(version)
-    comm = encode_octet_string(community.encode())
-    return encode_sequence(ver + comm + pdu)
-
-
-def _build_getbulk_request(oid, community, version, max_repetitions, request_id):
-    pdu = _build_pdu(
-        ASN1_CONTEXT | 0x05,
-        request_id, 0, max_repetitions,
         encode_sequence(encode_varbind(oid, encode_null()))
     )
     ver = encode_int(version)
@@ -400,13 +373,6 @@ MIBS = {
     "hrStorageSize": "1.3.6.1.2.1.25.2.3.1.5",
     "hrStorageUsed": "1.3.6.1.2.1.25.2.3.1.6",
 }
-VENDOR_MIBS = {}
-
-
-def snmp_set(host, community, oid, value, value_type="i"):
-    """SNMP Set - no implementado en pure Python (solo lectura por ahora)."""
-    return {"error": "SNMP Set no soportado sin binario snmpset"}
-
 
 def get_mac_table(host, community="public", timeout=5):
     """Obtiene tabla MAC (bridge MIB)."""

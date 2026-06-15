@@ -2,8 +2,6 @@
 # Pure-Python ASN.1 BER (Basic Encoding Rules) for SNMP v1/v2c
 # No dependencies beyond stdlib.
 
-import struct
-
 # ─── ASN.1 tag constants ───────────────────────────────────
 ASN1_BOOLEAN      = 0x01
 ASN1_INTEGER      = 0x02
@@ -97,10 +95,6 @@ def encode_varbind(oid, value):
     return encode_sequence(encode_oid(oid) + value)
 
 
-def encode_boolean(value):
-    return encode_tlv(ASN1_BOOLEAN, b'\x01' if value else b'\x00')
-
-
 # ─── Decode helpers ─────────────────────────────────────────
 
 def _encode_length(length):
@@ -179,13 +173,6 @@ def unwrap_sequence(data):
     return contents, data[offset:]
 
 
-def unwrap_constructed(tag, data):
-    """Unwrap a constructed (context-specific) TLV."""
-    (inner_tag, inner_data), offset = decode_tlv(data)
-    # The inner data already is the value; we return it as-is, and the tag
-    return (inner_tag, inner_data), data[offset:]
-
-
 def skip_octet_string(data):
     """Skip an OCTET STRING. Returns (value, rest)."""
     (tag, value), offset = decode_tlv(data)
@@ -194,36 +181,4 @@ def skip_octet_string(data):
     return value, data[offset:]
 
 
-def decode_octet_string(data):
-    """Decode OCTET STRING. Returns (value_bytes, rest)."""
-    (tag, value), offset = decode_tlv(data)
-    if tag != ASN1_OCTET_STRING:
-        raise ValueError(f"Expected OCTET STRING, got 0x{tag:02x}")
-    return value, data[offset:]
 
-
-def format_snmp_value(tag, raw_bytes):
-    """Formatea un valor SNMP para mostrar."""
-    if tag == ASN1_INTEGER:
-        return int.from_bytes(raw_bytes, 'big', signed=True)
-    elif tag == ASN1_OCTET_STRING:
-        # Try UTF-8 decode, fallback to hex
-        try:
-            return raw_bytes.decode('utf-8')
-        except:
-            return raw_bytes.hex()
-    elif tag == ASN1_OBJECT_ID:
-        oid, _ = decode_oid(encode_tlv(tag, raw_bytes))
-        return oid
-    elif tag == ASN1_NULL:
-        return None
-    elif tag == ASN1_BOOLEAN:
-        return len(raw_bytes) > 0 and raw_bytes[0] != 0
-    elif tag == ASN1_BIT_STRING:
-        return raw_bytes.hex()
-    # COUNTER, GAUGE, TIMETICKS, etc. use ASN1_CONTEXT tags or APPLICATION tags
-    # Try as unsigned int
-    try:
-        return int.from_bytes(raw_bytes, 'big')
-    except:
-        return raw_bytes.hex()

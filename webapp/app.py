@@ -57,10 +57,10 @@ from techbot.scanner import (
     identify_device, CCTV_PORTS, AC_PORTS, ONVIF_PORTS,
 )
 from techbot.snmp import (
-    snmp_get, snmp_walk, snmp_set, get_system_info,
+    snmp_get, snmp_walk, get_system_info,
     get_interfaces, get_mac_table, get_routing_table,
     get_storage, detect_vendor, get_arp_table,
-    snmp_check, MIBS, VENDOR_MIBS,
+    snmp_check, MIBS,
     detect_device_type, get_cctv_info,
 )
 from techbot.ipam import (
@@ -1029,12 +1029,10 @@ def api_bw_traffic():
 def api_snmp_info():
     return jsonify({
         "mibs": {k: v for k, v in list(MIBS.items())[:30]},
-        "vendors": VENDOR_MIBS,
-        "howto": "Requiere snmpget/snmpwalk instalados en el sistema",
+        "howto": "SNMP v1/v2c puro (sin binarios externos)",
         "functions": [
             "snmp_get(host, community, oid) - Obtener un valor",
             "snmp_walk(host, community, oid) - Caminar un árbol",
-            "snmp_set(host, community, oid, value) - Escribir un valor",
             "get_system_info(host, community) - Info del sistema",
             "get_interfaces(host, community) - Interfaces de red",
             "get_mac_table(host, community) - Tabla MAC",
