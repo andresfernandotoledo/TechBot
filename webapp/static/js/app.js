@@ -2000,13 +2000,10 @@ function showTools() {
     <div class="section-header" style="margin-top:12px">📷 QR Scanner</div>
     <div style="margin:6px 0;padding:6px;background:var(--card);border-radius:6px">
       <p class="text-sm text-muted mb-8">Escaneá un QR para auto-completar IP, MAC o URL</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-        <button class="btn" onclick="qrStart()">📷 Cámara</button>
-        <label class="btn btn-outline" style="cursor:pointer">🖼️ Subir foto<input type="file" accept="image/*" capture="environment" style="display:none" id="qrFileInput" onchange="qrFromFile(this)"></label>
-      </div>
+      <button class="btn" onclick="qrStart()">📷 Abrir cámara</button>
       <button class="btn btn-outline" onclick="qrStop()" style="display:none" id="qrStopBtn">✕ Cerrar</button>
       <div id="qrReader" style="display:none;margin-top:8px">
-        <video id="qrVideo" style="width:100%;max-width:360px;border-radius:8px;background:#000" playsinline muted></video>
+        <video id="qrVideo" style="width:100%;max-width:360px;border-radius:8px;background:#000" playsinline autoplay muted></video>
         <canvas id="qrCanvas" style="display:none"></canvas>
         <div id="qrResult" class="text-sm text-muted" style="margin-top:6px"></div>
       </div>
@@ -2079,98 +2076,86 @@ function showTools() {
 }
 
 let qrStream = null;
-let qrInterval = null;
+let qrAnimId = null;
 
 function qrDecode(imageData, resultEl) {
-  if (typeof jsQR !== "function") {
-    resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Librería jsQR no cargada. Verificar conexión a internet.</span>";
-    return null;
+  let code = null;
+  if ('BarcodeDetector' in window) {
+    const detector = new BarcodeDetector({formats: ['qr_code']});
+    detector.detect(imageData).then(barcodes => {
+      if (barcodes.length > 0) {
+        qrDetected(barcodes[0].rawValue, resultEl);
+      }
+    }).catch(() => {});
+  } else if (typeof jsQR === "function") {
+    code = jsQR(imageData.data, imageData.width, imageData.height);
   }
-  const code = jsQR(imageData.data, imageData.width, imageData.height);
   if (code) {
-    const val = code.data;
-    resultEl.innerHTML = `<span style='color:var(--success)'>✅ QR: ${escapeHtml(val)}</span>`;
-    qrStop();
-    fillQRValue(val);
-    return val;
+    qrDetected(code.data, resultEl);
+    return true;
   }
-  return null;
+  return false;
+}
+
+function qrDetected(val, resultEl) {
+  resultEl.innerHTML = `<span style='color:var(--success)'>✅ QR: ${escapeHtml(val)}</span>`;
+  qrStop();
+  fillQRValue(val);
+}
+
+function qrProcessFrame() {
+  const video = document.getElementById("qrVideo");
+  const canvas = document.getElementById("qrCanvas");
+  const resultEl = document.getElementById("qrResult");
+  if (!video || video.readyState < 2) { qrAnimId = requestAnimationFrame(qrProcessFrame); return; }
+  if (video.videoWidth === 0 || video.videoHeight === 0) { qrAnimId = requestAnimationFrame(qrProcessFrame); return; }
+  const ctx = canvas.getContext("2d");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  qrDecode(imageData, resultEl);
+  qrAnimId = requestAnimationFrame(qrProcessFrame);
 }
 
 function qrStart() {
   const resultEl = document.getElementById("qrResult");
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ Cámara no disponible en este navegador. Probá con 'Subir foto'.</span>";
+    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ Cámara no disponible en este navegador</span>";
     return;
   }
   if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ La cámara requiere HTTPS. Usá localhost o subí una foto.</span>";
+    resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ La cámara requiere HTTPS. Accedé por http://localhost:5000</span>";
     return;
   }
   const reader = document.getElementById("qrReader");
   const stopBtn = document.getElementById("qrStopBtn");
-  const video = document.getElementById("qrVideo");
-  const canvas = document.getElementById("qrCanvas");
-  const ctx = canvas.getContext("2d");
   reader.style.display = "block";
   stopBtn.style.display = "inline-block";
   resultEl.innerHTML = "<span class='text-muted'>Solicitando cámara...</span>";
-  navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}).then(stream => {
+  navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:"environment",width:{ideal:640},height:{ideal:480}}}).then(stream => {
     qrStream = stream;
+    const video = document.getElementById("qrVideo");
     video.srcObject = stream;
     resultEl.innerHTML = "<span class='text-muted'>Enfocá el QR...</span>";
-    video.play().catch(() => {});
-    qrInterval = setInterval(() => {
-      if (video.readyState < video.HAVE_CURRENT_DATA) return;
-      if (video.videoWidth === 0 || video.videoHeight === 0) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      qrDecode(imageData, resultEl);
-    }, 500);
+    qrAnimId = requestAnimationFrame(qrProcessFrame);
   }).catch(e => {
     const msg = e.message || e.name || "";
-    if (msg.includes("NotAllowed") || msg.includes("Permission"))
-      resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Permiso de cámara denegado. Concedelo en los ajustes del navegador.</span>";
+    if (msg.includes("NotAllowed") || msg.includes("Permission") || msg.includes("denied"))
+      resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Permiso de cámara denegado</span>";
     else if (msg.includes("NotFound"))
-      resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ No se encontró cámara. Probá con 'Subir foto'.</span>";
+      resultEl.innerHTML = "<span style='color:var(--warning)'>⚠️ No se encontró cámara trasera</span>";
     else
       resultEl.innerHTML = `<span style='color:var(--danger)'>❌ ${escapeHtml(msg)}</span>`;
   });
 }
 
 function qrStop() {
-  if (qrInterval) { clearInterval(qrInterval); qrInterval = null; }
+  if (qrAnimId) { cancelAnimationFrame(qrAnimId); qrAnimId = null; }
   if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
   document.getElementById("qrReader").style.display = "none";
   document.getElementById("qrStopBtn").style.display = "none";
   document.getElementById("qrResult").innerHTML = "";
-}
-
-function qrFromFile(input) {
-  const resultEl = document.getElementById("qrResult");
-  const reader = document.getElementById("qrReader");
-  reader.style.display = "block";
-  resultEl.innerHTML = "<span class='text-muted'>Decodificando QR...</span>";
-  const file = input.files[0];
-  if (!file) return;
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.getElementById("qrCanvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    if (!qrDecode(imageData, resultEl))
-      resultEl.innerHTML = "<span class='text-muted'>No se detectó QR en la imagen</span>";
-  };
-  img.onerror = () => {
-    resultEl.innerHTML = "<span style='color:var(--danger)'>❌ Error al cargar la imagen</span>";
-  };
-  img.src = URL.createObjectURL(file);
-  input.value = "";
 }
 
 function fillQRValue(val) {
@@ -2448,7 +2433,7 @@ async function pingLatency() {
 function showWiFi() {
   document.getElementById("results").innerHTML = `
     <h3 style='margin-bottom:12px'>📶 Escáner WiFi</h3>
-    <p class='text-sm text-muted mb-8'>Escanea redes WiFi cercanas usando iwlist (Linux) o netsh (Windows)</p>
+    <p class='text-sm text-muted mb-8'>Escanea redes WiFi cercanas (Android Termux, Linux, Windows, macOS)</p>
     <div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px'>
       <button class='btn' onclick='wifiScan()'>📶 Escanear</button>
       <button class='btn btn-outline' onclick='wifiInterfaces()'>🔌 Interfaces</button>
@@ -2457,33 +2442,50 @@ function showWiFi() {
   `;
 }
 
+function wifiRenderNetworks(r, el) {
+  if (r.error) { el.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
+  if (!r.networks || r.count === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron redes</span>"; return; }
+  let html = `<div class='result-box' style='max-height:none'><div class='mb-6'><strong>📶 ${r.count} redes encontradas</strong> (${escapeHtml(r.interface||"")})</div>`;
+  r.networks.sort((a,b) => (b.signal_pct||0) - (a.signal_pct||0));
+  r.networks.forEach(n => {
+    const sig = n.signal_pct !== undefined ? n.signal_pct : 0;
+    const cls = sig >= 70 ? "success" : sig >= 40 ? "warning" : "danger";
+    html += `<div class='cmd-item' style='padding:6px 0'>
+      <span style='flex:1'>
+        <strong>${escapeHtml(n.ssid||"<hidden>")}</strong>
+        <span class='text-xs text-muted' style='margin-left:6px'>${escapeHtml(n.bssid||"")}</span>
+      </span>
+      <span style='display:flex;gap:6px;align-items:center'>
+        <span class='badge badge-${cls}'>${sig}%</span>
+        <span class='text-xs'>CH ${n.channel||"?"}</span>
+        <span class='text-xs'>${escapeHtml(n.wpa||n.standard||"")}</span>
+      </span>
+    </div>`;
+  });
+  html += "</div>";
+  el.innerHTML = html;
+}
+
 async function wifiScan() {
   const el = document.getElementById("wifiScanResult");
   el.innerHTML = "<span class='text-muted'>Escaneando redes WiFi...</span>";
   try {
-    const r = await (await fetch("/api/wifi/scan")).json();
-    if (r.error) { el.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHtml(r.error)}</span>`; return; }
-    if (!r.networks || r.count === 0) { el.innerHTML = "<span class='text-muted'>No se encontraron redes</span>"; return; }
-    let html = `<div class='result-box' style='max-height:none'><div class='mb-6'><strong>📶 ${r.count} redes encontradas</strong> (${escapeHtml(r.interface||"")})</div>`;
-    // Ordenar por señal descendente
-    r.networks.sort((a,b) => (b.signal_pct||0) - (a.signal_pct||0));
-    r.networks.forEach(n => {
-      const sig = n.signal_pct !== undefined ? n.signal_pct : 0;
-      const cls = sig >= 70 ? "success" : sig >= 40 ? "warning" : "danger";
-      html += `<div class='cmd-item' style='padding:6px 0'>
-        <span style='flex:1'>
-          <strong>${escapeHtml(n.ssid||"<hidden>")}</strong>
-          <span class='text-xs text-muted' style='margin-left:6px'>${escapeHtml(n.bssid||"")}</span>
-        </span>
-        <span style='display:flex;gap:6px;align-items:center'>
-          <span class='badge badge-${cls}'>${sig}%</span>
-          <span class='text-xs'>CH ${n.channel||"?"}</span>
-          <span class='text-xs'>${escapeHtml(n.wpa||n.standard||"")}</span>
-        </span>
-      </div>`;
-    });
-    html += "</div>";
-    el.innerHTML = html;
+    const r = await (await fetch("/api/wifi/scan?async=true")).json();
+    if (r.task_id) {
+      el.innerHTML = "<span class='text-muted'>Escaneando... (puede tardar hasta 60s)</span>";
+      const timeout = 75000;
+      const start = Date.now();
+      const poll = async () => {
+        if (Date.now() - start > timeout) { el.innerHTML = "<span style='color:var(--warning)'>⏱️ Tiempo de espera agotado</span>"; return; }
+        const t = await (await fetch(`/api/task/${r.task_id}`)).json();
+        if (t.status === "done") { wifiRenderNetworks(t.result || {}, el); return; }
+        if (t.status === "error") { el.innerHTML = `<span style='color:var(--danger)'>❌ ${escapeHtml(t.error)}</span>`; return; }
+        setTimeout(poll, 1000);
+      };
+      poll();
+    } else {
+      wifiRenderNetworks(r, el);
+    }
   } catch(e) { el.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`; }
 }
 

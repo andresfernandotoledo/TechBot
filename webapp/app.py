@@ -967,7 +967,11 @@ def api_tools_ping_latency():
 @app.route("/api/wifi/scan")
 def api_wifi_scan():
     interface = request.args.get("interface", "")
+    async_mode = request.args.get("async", "").lower() == "true"
     try:
+        if async_mode:
+            task_id = start_task(wifi_tools.scan_wifi, interface or None)
+            return jsonify({"task_id": task_id, "status": "running"})
         return jsonify(wifi_tools.scan_wifi(interface or None))
     except Exception as e:
         return jsonify({"error": str(e)}), 500

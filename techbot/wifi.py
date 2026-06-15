@@ -85,8 +85,10 @@ def _termux_scan():
                 "encrypted": True,
             })
         return networks
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        return {"error": str(e)}
+    except FileNotFoundError:
+        return {"error": "Comando no encontrado: termux-wifi-scaninfo"}
+    except subprocess.TimeoutExpired:
+        return {"error": "Tiempo de espera agotado (60s). WiFi apagado o sin respuesta de Termux:API."}
     except json.JSONDecodeError as e:
         return {"error": f"JSON inválido: {e}"}
 
@@ -246,10 +248,10 @@ def scan_wifi(interface=None):
                 nets = _termux_scan()
                 if isinstance(nets, dict) and "error" in nets:
                     return {**result, "error": nets["error"]}
-                if nets is not None and len(nets) > 0:
+                if nets is not None:
                     return {**result, "networks": nets, "count": len(nets), "interface": "termux-api", "method": "termux-wifi-scaninfo"}
-                # termux API instalado pero no devolvió redes → error específico
-                return {**result, "error": "termux-wifi-scaninfo no devolvió redes. Verificar WiFi encendido y permiso de ubicación para Termux."}
+                # command not found by _termux_scan (None)
+                return {**result, "error": "termux-wifi-scaninfo no disponible"}
             # Termux sin termux-api instalado
             if shutil.which("iw") or shutil.which("iwlist"):
                 pass  # probar iw/iwlist abajo
@@ -340,11 +342,22 @@ def interface_info():
     """Obtiene información de interfaces WiFi."""
     try:
         if _is_termux():
+            if not shutil.which("termux-wifi-connectioninfo"):
+                return {"error": "Instalá Termux:API: pkg install termux-api"}
             try:
-                r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=5)
+                r = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=10)
                 if r.returncode == 0 and r.stdout.strip():
-                    return {"interfaces": [json.loads(r.stdout)]}
-            except: pass
+                    data = json.loads(r.stdout)
+                    if isinstance(data, dict) and "error" in data:
+                        return {"error": data["error"]}
+                    return {"interfaces": [data]}
+                if r.stderr.strip():
+                    return {"error": r.stderr.strip()}
+                return {"error": "WiFi apagado o sin permiso de ubicación"}
+            except subprocess.TimeoutExpired:
+                return {"error": "termux-wifi-connectioninfo tardó demasiado"}
+            except Exception as e:
+                return {"error": str(e)}
 
         if _ANDROID and not _is_termux():
             info = _android_wifi_connection()
