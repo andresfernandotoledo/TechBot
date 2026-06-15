@@ -1706,6 +1706,9 @@ function showSpeedtest() {
     <div class='section'>
       <div class='section-body text-center'>
         <div style='font-size:48px;margin:16px 0'>⚡</div>
+        <div style='display:flex;gap:6px;margin-bottom:10px'>
+          <input type='text' id='stCustomUrl' placeholder='URL servidor (opcional, ej: http://mirror.isp.com/100MB.zip)' style='flex:1;font-size:13px'>
+        </div>
         <button class='btn' id='stBtn' onclick='startSpeedtest()'>▶ Iniciar Speedtest</button>
         <div id='stResult' class='mt-16'></div>
       </div>
@@ -1792,7 +1795,10 @@ async function startSpeedtest() {
   `;
 
   try {
-    const resp = await fetch("/api/speedtest?async=true", { method: "POST" });
+    const customUrl = document.getElementById("stCustomUrl").value.trim();
+    let url = "/api/speedtest?async=true";
+    if (customUrl) url += "&url=" + encodeURIComponent(customUrl);
+    const resp = await fetch(url, { method: "POST" });
     const data = await resp.json();
     if (data.error) {
       res.innerHTML = `<div class='result-box' style='color:var(--danger)'>Error: ${data.error}</div>`;

@@ -1450,11 +1450,12 @@ def api_task_status(task_id):
 @app.route("/api/speedtest", methods=["POST"])
 def api_speedtest():
     async_mode = request.args.get("async", "").lower() == "true"
+    custom_url = request.args.get("url", "").strip() or None
     try:
         if async_mode:
-            task_id = start_task(run_speedtest)
+            task_id = start_task(run_speedtest, custom_url)
             return jsonify({"task_id": task_id, "status": "running"})
-        result = run_speedtest()
+        result = run_speedtest(custom_url)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

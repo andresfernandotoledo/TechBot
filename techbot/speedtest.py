@@ -5,15 +5,19 @@ import urllib.request
 import urllib.error
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-_TEST_FILES = [
-    ("http://speedtest.tele2.net/100MB.zip", 100_000_000),
-    ("http://speedtest.tele2.net/10MB.zip",  10_000_000),
-    ("http://speedtest.tele2.net/5MB.zip",    5_000_000),
-    ("http://speedtest.tele2.net/1MB.zip",    1_000_000),
-    ("http://speedtest.tele2.net/100KB.zip",    100_000),
-    ("https://proof.ovh.net/files/10Mb.dat", 10_000_000),
-    ("https://proof.ovh.net/files/1Mb.dat",   1_000_000),
+_STREAMS = 6
+_DURATION = 10
+_CONNECT_TIMEOUT = 25
+
+_DL_URL = "http://speedtest.tele2.net/100MB.zip"
+_UL_URL = "http://speedtest.tele2.net/upload.php"
+
+_DL_FALLBACKS = [
+    "http://speedtest.tele2.net/10MB.zip",
+    "http://speedtest.tele2.net/5MB.zip",
+    "https://proof.ovh.net/files/10Mb.dat",
 ]
 
 _PING_HOSTS = [
@@ -40,17 +44,6 @@ def _format_bps(bps):
     return f"{bps:.0f} bps"
 
 
-def _format_bytes(bytes_val):
-    if bytes_val is None: return "\u2014"
-    if bytes_val >= 1_073_741_824: return f"{bytes_val / 1_073_741_824:.1f} GB"
-    if bytes_val >= 1_048_576: return f"{bytes_val / 1_048_576:.1f} MB"
-    if bytes_val >= 1_024: return f"{bytes_val / 1_024:.1f} KB"
-    return f"{bytes_val} B"
-
-
-_UPLOAD_SIZES = [1_048_576, 5_242_880, 10_485_760]  # 1MB, 5MB, 10MB
-_UPLOAD_URL = "http://speedtest.tele2.net/upload.php"
-
 _progress = {"status": "idle", "download": 0, "upload": 0, "ping": 0, "server": "", "ip": ""}
 _lock = threading.Lock()
 
@@ -66,7 +59,6 @@ def _set(k, v):
 
 
 def _fetch_public_ip():
-    """Obtiene IP pública desde múltiples servicios."""
     for url, fmt, key in _IP_SERVICES:
         try:
             req = urllib.request.Request(url, method="GET")
@@ -99,51 +91,72 @@ def _tcp_ping(host, port, timeout=3):
         return None
 
 
-def _download_speed(url, expected_size, duration=8):
-    try:
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("User-Agent", "TechBot/1.0")
-        start = time.time()
-        resp = urllib.request.urlopen(req, timeout=duration + 15)
-        total = 0
-        deadline = start + duration
-        while time.time() < deadline:
+def _parallel_download(url, duration, streams):
+    total = [0]
+    stop = [False]
+
+    def worker():
+        deadline = time.time() + duration
+        while time.time() < deadline and not stop[0]:
             try:
-                chunk = resp.read(65536)
-                if not chunk: break
-                total += len(chunk)
+                req = urllib.request.Request(url, method="GET")
+                req.add_header("User-Agent", "TechBot/1.0")
+                resp = urllib.request.urlopen(req, timeout=_CONNECT_TIMEOUT)
+                while time.time() < deadline and not stop[0]:
+                    try:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        total[0] += len(chunk)
+                    except:
+                        break
+                resp.close()
             except:
-                break
-        elapsed = time.time() - start
-        resp.close()
-        if elapsed > 0 and total > 0:
-            bps = int(total * 8 / elapsed)
-            return bps, total
-        return 0, total
-    except Exception as e:
-        return 0, 0
+                pass
+
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(streams)]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=duration + _CONNECT_TIMEOUT + 5)
+    stop[0] = True
+    return total[0]
 
 
-def _upload_speed(url, size, duration=8):
-    try:
-        data = os.urandom(size)
-        req = urllib.request.Request(url, method="POST", data=data)
-        req.add_header("User-Agent", "TechBot/1.0")
-        req.add_header("Content-Type", "application/octet-stream")
-        start = time.time()
-        resp = urllib.request.urlopen(req, timeout=duration + 15)
-        elapsed = time.time() - start
-        resp.read()
-        resp.close()
-        if elapsed > 0:
-            bps = int(size * 8 / elapsed)
-            return bps, size
-        return 0, 0
-    except Exception as e:
-        return 0, 0
+def _parallel_upload(url, duration, streams):
+    total = [0]
+    stop = [False]
+    chunk_size = 262144
+
+    def worker():
+        deadline = time.time() + duration
+        while time.time() < deadline and not stop[0]:
+            try:
+                data = os.urandom(chunk_size)
+                req = urllib.request.Request(url, method="POST", data=data)
+                req.add_header("User-Agent", "TechBot/1.0")
+                req.add_header("Content-Type", "application/octet-stream")
+                resp = urllib.request.urlopen(req, timeout=_CONNECT_TIMEOUT)
+                resp.read()
+                resp.close()
+                total[0] += len(data)
+            except:
+                pass
+
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(streams)]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=duration + _CONNECT_TIMEOUT + 5)
+    stop[0] = True
+    return total[0]
 
 
-def run_speedtest():
+def _try_download(dl_url, streams, duration):
+    total_bytes = _parallel_download(dl_url, duration, streams)
+    if total_bytes > 0:
+        bps = int(total_bytes * 8 / duration)
+        return bps, total_bytes
+    return 0, 0
+
+
+def run_speedtest(custom_url=None):
     try:
         _set("status", "Obteniendo IP pública...")
         public_ip = _fetch_public_ip()
@@ -153,35 +166,29 @@ def run_speedtest():
         pings = [p for p in [_tcp_ping(h, p) for h, p in _PING_HOSTS] if p is not None]
         avg_ping = round(sum(pings) / len(pings), 1) if pings else 0
         _set("ping", avg_ping)
-        best_ping_host = _PING_HOSTS[pings.index(min(pings))][0] if pings else "N/A"
-        _set("server", f"{best_ping_host} (TCP ping)")
+        best_ping = _PING_HOSTS[pings.index(min(pings))][0] if pings else "N/A"
+        server_name = custom_url or f"{best_ping} (multi-stream)"
+        _set("server", server_name)
 
-        _set("status", "Probando descarga...")
+        _set("status", "Descargando (6 streams)...")
+        dl_url = custom_url or _DL_URL
         dl_bps, dl_bytes = 0, 0
-        for url, size in _TEST_FILES:
-            _set("status", f"Descargando {url.split('/')[-1]}...")
-            bps, total = _download_speed(url, size)
-            if bps > dl_bps:
-                dl_bps = bps
-                dl_bytes = total
-            if dl_bps > 0:
-                break
 
+        if custom_url:
+            dl_bps, dl_bytes = _try_download(custom_url, _STREAMS, _DURATION)
+        if dl_bps == 0:
+            for fallback in [dl_url] + _DL_FALLBACKS:
+                dl_bps, dl_bytes = _try_download(fallback, _STREAMS, _DURATION)
+                if dl_bps > 0:
+                    break
         _set("download", dl_bps)
 
-        _set("status", "Probando subida...")
-        ul_bps = 0
-        for size in _UPLOAD_SIZES:
-            _set("status", f"Subiendo {_format_bytes(size)}...")
-            bps, _ = _upload_speed(_UPLOAD_URL, size)
-            if bps > ul_bps:
-                ul_bps = bps
-            if ul_bps > 0:
-                break
-
+        _set("status", "Subiendo (6 streams)...")
+        total_bytes = _parallel_upload(_UL_URL, _DURATION, _STREAMS)
+        ul_bps = int(total_bytes * 8 / _DURATION) if total_bytes > 0 else 0
         _set("upload", ul_bps)
-        _set("status", "Completado")
 
+        _set("status", "Completado")
         return {
             "status": "ok",
             "download_bps": dl_bps,
