@@ -1,0 +1,24 @@
+com.techbot.app-core-1.9.0-0 /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/res
+com.techbot.app-jetified-activity-1.6.0-1 /home/andres/.gradle/caches/transforms-3/3a0e503a36733486e895e204f0fde0fb/transformed/jetified-activity-1.6.0/res
+com.techbot.app-jetified-startup-runtime-1.1.1-2 /home/andres/.gradle/caches/transforms-3/3aa5335a704b2346b8c022bd9e5ee741/transformed/jetified-startup-runtime-1.1.1/res
+com.techbot.app-lifecycle-runtime-2.5.1-3 /home/andres/.gradle/caches/transforms-3/3dcc16ba9dc5430738d58f184d4973ec/transformed/lifecycle-runtime-2.5.1/res
+com.techbot.app-jetified-annotation-experimental-1.3.0-4 /home/andres/.gradle/caches/transforms-3/4a0524b4a9f9236aebcd1646b0892c21/transformed/jetified-annotation-experimental-1.3.0/res
+com.techbot.app-swiperefreshlayout-1.1.0-5 /home/andres/.gradle/caches/transforms-3/4a6fae8f4aea2ca18dde9cf6078eb1c1/transformed/swiperefreshlayout-1.1.0/res
+com.techbot.app-jetified-emoji2-views-helper-1.2.0-6 /home/andres/.gradle/caches/transforms-3/4d5738bd307ad6375e4198a667d4b363/transformed/jetified-emoji2-views-helper-1.2.0/res
+com.techbot.app-appcompat-1.6.1-7 /home/andres/.gradle/caches/transforms-3/7e58a7e249d3ea889a787b5b56070ca8/transformed/appcompat-1.6.1/res
+com.techbot.app-lifecycle-viewmodel-2.5.1-8 /home/andres/.gradle/caches/transforms-3/8528ffebe34e255b90aa9015164cd743/transformed/lifecycle-viewmodel-2.5.1/res
+com.techbot.app-jetified-lifecycle-process-2.4.1-9 /home/andres/.gradle/caches/transforms-3/8ea73b818cf9c383dc88b0fcc26cb3cb/transformed/jetified-lifecycle-process-2.4.1/res
+com.techbot.app-jetified-core-ktx-1.9.0-10 /home/andres/.gradle/caches/transforms-3/92c71c8716aa91386cdd44cfb5fd76a6/transformed/jetified-core-ktx-1.9.0/res
+com.techbot.app-lifecycle-livedata-core-2.5.1-11 /home/andres/.gradle/caches/transforms-3/94134f04dbfcdc8fd2fbcc33a396f754/transformed/lifecycle-livedata-core-2.5.1/res
+com.techbot.app-fragment-1.3.6-12 /home/andres/.gradle/caches/transforms-3/9e2306f4cd8d2bd29d0f904a93b3ac53/transformed/fragment-1.3.6/res
+com.techbot.app-jetified-appcompat-resources-1.6.1-13 /home/andres/.gradle/caches/transforms-3/b1d24b38ce2cf845e9d74a29eeb2dd5f/transformed/jetified-appcompat-resources-1.6.1/res
+com.techbot.app-jetified-lifecycle-viewmodel-savedstate-2.5.1-14 /home/andres/.gradle/caches/transforms-3/d5b12806ff25c373b35e21bc2a4960ca/transformed/jetified-lifecycle-viewmodel-savedstate-2.5.1/res
+com.techbot.app-jetified-savedstate-1.2.0-15 /home/andres/.gradle/caches/transforms-3/e84e96cdea5f86eb9a9db369ceff9519/transformed/jetified-savedstate-1.2.0/res
+com.techbot.app-jetified-emoji2-1.2.0-16 /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/res
+com.techbot.app-pngs-17 /home/andres/Escritorio/boot tecnico/android/app/build/generated/res/pngs/debug
+com.techbot.app-resValues-18 /home/andres/Escritorio/boot tecnico/android/app/build/generated/res/resValues/debug
+com.techbot.app-packageDebugResources-19 /home/andres/Escritorio/boot tecnico/android/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.techbot.app-packageDebugResources-20 /home/andres/Escritorio/boot tecnico/android/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.techbot.app-merged_res-21 /home/andres/Escritorio/boot tecnico/android/app/build/intermediates/merged_res/debug
+com.techbot.app-debug-22 /home/andres/Escritorio/boot tecnico/android/app/src/debug/res
+com.techbot.app-main-23 /home/andres/Escritorio/boot tecnico/android/app/src/main/res

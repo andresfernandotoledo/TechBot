@@ -172,8 +172,6 @@ public class MainActivity extends AppCompatActivity {
         if (settingsBtn != null) settingsBtn.setOnClickListener(v -> showSettings());
 
         // Cargar ultima URL o localhost
-        String savedUrl = prefs.getString("server_url", "http://127.0.0.1:5000");
-        urlInput.setText(savedUrl);
     }
 
     private void startEmbeddedServer() {
@@ -181,61 +179,38 @@ public class MainActivity extends AppCompatActivity {
             try {
                 Log.d(TAG, "Iniciando Python (Chaquopy)...");
 
-                // Inicializar Chaquopy
                 if (!Python.isStarted()) {
                     Python.start(new AndroidPlatform(this));
                 }
 
                 Python py = Python.getInstance();
+                // Importar server.py → auto-inicia Flask en daemon thread
                 PyObject serverModule = py.getModule("server");
 
-                Log.d(TAG, "Llamando server.start()...");
-                serverModule.callAttr("start", 5000);
+                Log.d(TAG, "Módulo server importado. Esperando servidor...");
+
+                // Esperar a que Flask esté listo (timeout 20s)
+                boolean ready = serverModule.callAttr("wait_ready", 20).toBoolean();
+                if (ready) {
+                    serverStarted = true;
+                    Log.d(TAG, "Servidor listo!");
+                    mainHandler.post(() -> webView.loadUrl("http://127.0.0.1:5000"));
+                } else {
+                    Log.e(TAG, "Servidor no respondió después de 20s");
+                    mainHandler.post(() -> {
+                        Toast.makeText(this, "Tiempo de espera agotado", Toast.LENGTH_LONG).show();
+                        webView.loadUrl(urlInput.getText().toString());
+                    });
+                }
 
             } catch (Exception e) {
                 Log.e(TAG, "Error iniciando servidor Python", e);
                 mainHandler.post(() -> {
-                    Toast.makeText(this,
-                            "Error iniciando servidor: " + e.getMessage(),
-                            Toast.LENGTH_LONG).show();
-                    // Fallback: cargar URL externa
+                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
                     webView.loadUrl(urlInput.getText().toString());
                 });
             }
         }, "techbot-server").start();
-
-        // Esperar a que el servidor esté listo y cargar WebView
-        new Thread(() -> {
-            int attempts = 0;
-            while (attempts < 30) {
-                try {
-                    java.net.URL url = new java.net.URL("http://127.0.0.1:5000/api/status");
-                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                    conn.setConnectTimeout(1000);
-                    conn.setReadTimeout(500);
-                    int code = conn.getResponseCode();
-                    conn.disconnect();
-                    if (code == 200) {
-                        serverStarted = true;
-                        Log.d(TAG, "Servidor listo! Cargando WebView...");
-                        mainHandler.post(() -> {
-                            webView.loadUrl("http://127.0.0.1:5000");
-                        });
-                        return;
-                    }
-                } catch (Exception e) {
-                    // Server not ready yet
-                }
-                attempts++;
-                try { Thread.sleep(500); } catch (InterruptedException ie) { return; }
-            }
-            // Timeout - cargar URL manual
-            Log.e(TAG, "Servidor no respondió después de 15s");
-            mainHandler.post(() -> {
-                Toast.makeText(this, "Tiempo de espera agotado. Verificá la URL.", Toast.LENGTH_LONG).show();
-                webView.loadUrl(urlInput.getText().toString());
-            });
-        }, "techbot-wait").start();
     }
 
     private void loadUrl() {

@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.techbot.app-mergeDebugResources-19:/values-ldltr-v21/values-ldltr-v21.xml",
+            "map": [
+                {
+                    "source": "/home/andres/.gradle/caches/transforms-3/7e58a7e249d3ea889a787b5b56070ca8/transformed/appcompat-1.6.1/res/values-ldltr-v21/values-ldltr-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "112",
+                        "endOffsets": "163"
+                    }
+                }
+            ]
+        }
+    ]
+}

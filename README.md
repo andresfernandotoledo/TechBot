@@ -1,23 +1,50 @@
-# TechBot
+# PilotEye / TechBot
 
-Asistente técnico para redes, CCTV, control de acceso y sistemas.  
-Interfaz web responsiva — funciona en las **4 plataformas**:  
-**PC (Windows/Linux)** · **macOS** · **Android (Termux)** · **APK Android (Chaquopy + WifiManager)**
+**Asistente técnico portátil** para redes, CCTV, control de acceso y sistemas.
+
+Funciona en **4 plataformas**: PC (Windows/Linux) · macOS · Android (Termux) · APK Android
+
+---
+
+## Índice
+
+- [Inicio rápido](#inicio-rápido)
+- [Manual del Usuario](#manual-del-usuario)
+  - [Escáner de Red](#-escáner-de-red)
+  - [Herramientas](#-herramientas)
+  - [SNMP](#-snmp)
+  - [Topología](#-topología)
+  - [Speedtest](#-speedtest)
+  - [CCTV](#-cctv)
+  - [Control de Acceso](#-control-de-acceso)
+  - [IPAM](#-ipam)
+  - [Auditoría](#-auditoría)
+  - [Calculadoras](#-calculadoras)
+  - [WiFi](#-wifi)
+  - [UPS / Zabbix](#-ups--zabbix)
+  - [Scripts](#-scripts)
+  - [Protocolos y Puertos](#-protocolos-y-puertos)
+  - [Comandos](#-comandos)
+  - [MAC Lookup](#-mac-lookup)
+  - [Diagnóstico CCTV](#-diagnóstico-cctv)
+  - [Ancho de Banda](#-ancho-de-banda)
+- [API REST (115 endpoints)](#api-rest)
+- [Stack Técnico](#stack-técnico)
+- [APK Android](#apk-android)
+- [Despliegue](#despliegue)
 
 ---
 
 ## Inicio rápido
 
+### PC
 ```bash
 pip install -r requirements.txt
 python run_webapp.py
+# Abrir http://localhost:5000
 ```
 
-Abrir `http://localhost:5000`.  
-En el móvil (misma WiFi): `http://<TU-IP>:5000`.
-
-### Android (Termux)
-
+### Android Termux
 ```bash
 pkg install python
 pip install -r requirements.txt
@@ -25,342 +52,425 @@ python run_webapp.py
 ```
 
 ### APK Android
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+cd android && ./build-apk.sh
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
-El directorio `android/` contiene un proyecto Android Studio (WebView).  
-Compilar: `cd android && ./build-apk.sh` (requiere Android SDK).
-
----
-
-## Contenido
-
-- [Escáner de Red](#escáner-de-red)
-- [Herramientas](#herramientas)
-- [Test de Velocidad](#test-de-velocidad)
-- [Monitoreo Continuo](#monitoreo-continuo)
-- [SNMP](#snmp)
-- [Planificación IP](#planificación-ip)
-- [Topología](#topología)
-- [APIs CCTV](#apis-cctv)
-- [Control de Acceso](#control-de-acceso)
-- [Diagnóstico](#diagnóstico)
-- [Diagnóstico de UPS](#diagnóstico-de-ups)
-- [Comandos](#comandos)
-- [Protocolos y Puertos](#protocolos-y-puertos)
-- [Calculadoras](#calculadoras)
-- [MAC Lookup](#mac-lookup)
-- [WiFi](#wifi)
-- [UPS / Zabbix](#ups--zabbix)
-- [Scripts Python](#scripts-python)
-- [PWA (App Instalable)](#pwa-app-instalable)
-- [APK Android](#apk-android)
-- [Dependencias](#dependencias)
-- [Arquitectura](#arquitectura)
+### PWA
+Abrí la web en Chrome Android → menú → "Agregar a pantalla de inicio".
 
 ---
 
-## Escáner de Red
+## Manual del Usuario
+
+### 🔍 Escáner de Red
+
+Escanéo TCP/UDP sin binarios externos. Todo implementado con sockets Python puros.
 
 | Función | Descripción |
 |---------|-------------|
-| **Ping + OS** | Ping por TCP connect (22, 80, 443, 8080, 8443, 3389, 9090). Sin bins externos. Fallback ICMP si disponible. Detecta SO por TTL |
-| **Escaneo Rápido** | 29 puertos comunes en paralelo |
-| **Descubrir Hosts** | Encuentra hosts activos en una subred (TCP ping multihilo) |
-| **Trazar Ruta** | Traceroute hasta un host |
-| **Puertos CCTV** | 17 puertos específicos de cámaras, DVR y NVR |
-| **Puertos Control de Acceso** | 10 puertos de controladores |
-| **Buscar CCTV/AC** | Descubre dispositivos en toda una subred |
-| **Escaneo Personalizado** | Puertos definidos por el usuario |
-| **Auto-detectar subred** | Botón que detecta tu IP y sugiere la subred |
-| **Presets** | 192.168.0.0/24 · 192.168.1.0/24 · 10.0.0.0/24 · 172.16.0.0/24 |
+| **Ping** | TCP connect al puerto 80 (no requiere ICMP). Detecta OS por TTL. |
+| **Quick Scan** | Escanéa 29 puertos comunes en 3 segundos. |
+| **Descubrir** | Escanéa una subred completa (CIDR) buscando hosts activos. |
+| **Traceroute** | IP_TTL sobre UDP, puro sin traceroute binario. |
+| **Scan Puertos** | Escanéa puertos TCP específicos. |
+| **Scan UDP** | Escanéa puertos UDP. |
+| **Scan CCTV** | Detecta cámaras Hikvision, Dahua, etc. por puertos conocidos. |
+| **Scan AC** | Detecta controladores de acceso (HID, Lenel, etc.). |
+| **Comparar** | Compara dos escanéos para detectar cambios. |
+| **Monitoreo** | Monitoreo continuo con alertas vía ntfy.sh. |
 
-> El ping usa TCP connect en vez de ICMP para funcionar **sin privilegios en cualquier SO**.  
-> Si el binario `ping` está disponible (Linux, Windows, Termux), se usa como fallback para obtener TTL.
+**Uso típico:**
+1. Ingresá una IP en el campo "Host"
+2. Seleccioná Quick Scan para un chequeo rápido
+3. Usá Discover para mapear toda una red (ej: `192.168.1.0/24`)
 
----
-
-## Herramientas
-
-Sección **🧰 Herramientas** en el menú. Todas con Python estándar (sin bins externos):
+### 🧰 Herramientas
 
 | Herramienta | Descripción |
 |-------------|-------------|
-| **DNS** | Consulta A, AAAA, PTR, ALL, MX |
-| **Certificado SSL** | Verifica CN, emisor, SANs, días restantes, protocolo y cifrado |
-| **Headers HTTP** | Muestra cabeceras de seguridad (HSTS, CSP, XFO, etc.) |
-| **Wake-on-LAN** | Enciende un equipo remoto mediante magic packet |
-| **Generar Token** | Contraseñas y tokens seguros |
-| **Lector QR** | Escanea códigos QR con la cámara y rellena campos automáticamente |
-| **Mi IP** | Detecta IP local y subred |
+| **DNS Lookup** | Resolución A, AAAA, MX, NS, TXT, CNAME |
+| **SSL Check** | Verifica certificado SSL: CN, SANs, emisor, expiración, protocolo, cifrado |
+| **HTTP Headers** | Muestra headers de respuesta + análisis de seguridad (HSTS, CSP, X-Frame-Options) |
+| **WHOIS** | Consulta WHOIS de dominio o IP |
+| **WOL** | Wake-on-LAN: envía magic packet a una MAC |
+| **Generar Token** | Token aleatorio configurable (longitud, dígitos, símbolos) |
+| **NTP** | Consulta hora NTP a servidor público |
+| **Port Knock** | Envía secuencia de port knocking |
+| **HTTP Status** | Verifica código de estado HTTP |
+| **Latencia** | Mide latencia continua a un host |
+| **Mi IP** | Muestra IP pública y local |
+
+### 📡 SNMP
+
+Implementación **SNMP v1/v2c pura** en Python (sin binarios externos). Codifica/decodifica BER ASN.1 directamente sobre UDP.
+
+| Función | Descripción |
+|---------|-------------|
+| **Check** | Verifica si SNMP responde en un host |
+| **Sistema** | Información del sistema (sysDescr, sysName, uptime, contacto, ubicación) |
+| **Interfaces** | Lista interfaces con tipo, MTU, velocidad, MAC, estado, tráfico |
+| **Detectar** | Detecta fabricante del dispositivo por sysObjectID |
+| **Walk** | Camina un árbol OID completo |
+| **MIBs** | Navegador interactivo de OIDs — 60+ MIBs organizadas en categorías |
+
+**MIBs disponibles:**
+- 💻 Sistema (sysDescr, sysName, sysUpTime, sysContact, sysLocation)
+- 🔌 Interfaces (ifDescr, ifType, ifSpeed, ifPhysAddress, ifIn/OutOctets, errores)
+- 🌐 Red/IP (ipForwarding, ARP table, estadísticas IP)
+- 🔗 Bridge/Switch (MAC table FDB, STP)
+- 💾 Almacenamiento (hrStorageDescr, tamaño, usado)
+- 🧠 Memoria/Sistema (hrSystemUptime, procesos, usuarios)
+- 🔗 TCP/UDP (conexiones, segmentos, datagramas)
+- 📊 Estadísticas SNMP (paquetes, versiones, community strings, errores)
+
+**Uso típico:**
+1. Ingresá IP del dispositivo
+2. Community string (default: `public`)
+3. Check → Sistema → Interfaces → MIBs
+
+### 🌐 Topología
+
+Editor visual de topología de red basado en Cytoscape.js.
+
+| Función | Descripción |
+|---------|-------------|
+| **Editor** | Arrastrar y soltar nodos, conexiones, etiquetas |
+| **Auto-descubrimiento** | Detecta dispositivos via TCP scan + ARP local + SNMP ARP |
+| **Iconos** | Router, switch, cámara, servidor, firewall, AP, UPS, NAS, impresora |
+| **Guardar/Cargar** | Topologías persistentes en localStorage |
+| **Exportar** | Exporta como imagen o JSON |
+
+### 🚀 Speedtest
+
+Test de velocidad multi-stream (6 conexiones paralelas).
+
+- Download y upload de 10 segundos
+- Servidor personalizable
+- Medición en Mbps con gráfico en tiempo real
+- Sin dependencias externas (urllib + threading)
+- Funciona detrás de NAT/proxy
+
+### 📷 CCTV
+
+Diagnóstico y configuración de cámaras CCTV.
+
+| Función | Descripción |
+|---------|-------------|
+| **Conexión** | Conecta a Hikvision (ISAPI), Dahua (CGI), ZKTeco |
+| **Info** | Datos del dispositivo, firmware, capacidad |
+| **Snapshot** | Captura instantánea desde la cámara |
+| **PTZ** | Control PTZ (presets, movimiento absoluto/relativo) |
+| **Eventos** | Eventos de alarma, detección de movimiento |
+| **Diagnóstico** | 15 procedimientos guiados para troubleshooting |
+| **Configuración** | Cambiar IP, password, datetime, DHCP, factory reset |
+| **RTSP** | URLs RTSP por fabricante |
+| **Credenciales** | Base de credenciales por defecto por marca |
+| **Pinout** | Pinout de conectores (RJ45, BNC, alimentación) |
+| **Storage** | Estimación de almacenamiento por días, codec, resolución |
+
+### 🔐 Control de Acceso
+
+Soporta **21 fabricantes**: Hikvision, Dahua, ZKTeco, Lenel, Kantech, Paxton, Gallagher, HID, Bosch, CDVI, DDS, ADT, Suprema, NEDAP, Kisi, Brivo, SALTO, Genetec, Axis, iClass, Vanderbilt.
+
+| Función | Descripción |
+|---------|-------------|
+| **Conectar** | Autentica contra el controlador |
+| **Estado** | Puertas, lectores, eventos |
+| **Auditoría** | Trae eventos de acceso (get_audit_trail) |
+| **Comandos** | Abrir puerta, bloquear, modo mantenimiento |
+
+### 🖥️ IPAM (IP Address Management)
+
+Gestión completa de direccionamiento IP.
+
+| Función | Descripción |
+|---------|-------------|
+| **Redes** | Agregar, editar, eliminar subredes (CIDR) |
+| **Reservas** | Reservas IP con MAC, hostname, descripción |
+| **DHCP** | Configuración de pools DHCP |
+| **DNS** | Registros A, AAAA, CNAME, MX, TXT |
+| **VLANs** | Gestión de VLANs con ID, nombre, subred |
+| **Sitios** | Organización por sitios/ubicaciones |
+| **Subnet usage** | Porcentaje de uso por subred |
+| **Sugerir IP** | Encuentra IP libre disponible |
+
+### 📋 Auditoría
+
+Genera un informe de seguridad completo de un host.
+
+**Datos recolectados:**
+- Ping (estado, OS, TTL, latencia)
+- Puertos abiertos (29 puertos comunes, con nivel de riesgo)
+- Dispositivos CCTV detectados
+- Traceroute (ruta de red)
+- Certificado SSL (si aplica)
+- HTTP Headers con análisis de seguridad
+- WHOIS
+
+**Score de seguridad:**
+- **A** (90–100): Excelente
+- **B** (75–89): Buena
+- **C** (55–74): Aceptable
+- **D** (35–54): Deficiente
+- **F** (0–34): Crítica
+
+**Recomendaciones automáticas** según hallazgos (puertos críticos, SSL expirado, headers faltantes, etc.)
+
+### ⚡ Calculadoras
+
+| Calculadora | Descripción |
+|-------------|-------------|
+| **Subredes/VLSM** | Cálculo de subredes, broadcast, hosts, wildcard |
+| **Ancho de Banda** | Tiempo de transferencia, conversión unidades |
+| **Ohm** | Voltaje, corriente, resistencia, potencia |
+| **dBm ↔ mW** | Conversión de unidades de potencia RF |
+| **CCTV Storage** | Días de grabación según codec, resolución, FPS |
+| **PoE** | Presupuesto de energía PoE |
+| **RAID** | Capacidad efectiva según nivel RAID |
+| **Conversiones** | Decimal, binario, hex, IP, máscara |
+
+### 📶 WiFi
+
+| Plataforma | Método |
+|------------|--------|
+| **Android APK** | WifiManager nativo vía TechBotBridge.java |
+| **Android Termux** | termux-wifi-scaninfo |
+| **Linux** | iw dev scan |
+| **Windows** | netsh wlan show networks |
+| **macOS** | /System/Library/PrivateFrameworks/Apple80211.framework/airport |
+
+Maneja SSID ocultos, errores de permiso, interfaces múltiples.
+
+### 🔋 UPS / Zabbix
+
+| Función | Descripción |
+|---------|-------------|
+| **Manual UPS** | 8 secciones interactivas: topología, componentes, baterías, instalación, mantenimiento |
+| **NUT** | Monitoreo UPS via NUT (Network UPS Tools) sobre TCP puro (puerto 3493) |
+| **Zabbix** | Conexión API Zabbix, lista de hosts, alertas, estado |
+
+### 📜 Scripts
+
+Scripts Python ejecutables directamente desde la UI.
+
+| Categoría | Scripts |
+|-----------|---------|
+| **Network** | ping, traceroute, dns_lookup, http_check, ssl_check, whois, speedtest, port_scan |
+| **DHCP** | dhcp_discover, dhcp_lease_check, dhcp_starvation |
+| **DNS** | dns_resolve, dns_reverse, dns_zone_transfer, dns_mx, dns_spf, dns_dmarc |
+| **Seguridad** | check_http_security, check_snmp_public, check_rdp_security, ssl_cert_check, check_mysql_security |
+| **Sistema** | audit_log, security_info, pam_config, limits_config, package_updates, services_list, docker_status, disk_usage, network_connections, process_list |
+
+### 📡 Protocolos y Puertos
+
+Base de datos de **59 protocolos** y **644 puertos** con búsqueda.
+
+- Protocolos: HTTP, DNS, DHCP, SNMP, FTP, SSH, SMTP, etc.
+- Puertos: número, protocolo, descripción, riesgo
+
+### 📋 Comandos
+
+Base de comandos por fabricante/sistema.
+
+| Categoría | Comandos |
+|-----------|----------|
+| **Cisco** | show, configure, interface, vlan, routing, acl, ospf, bgp, stp |
+| **MikroTik** | interface, ip, routing, dhcp, firewall, bridge, capsman |
+| **Fortinet** | config system, config router, diagnose, execute |
+| **Linux** | systemd, network, firewall, disk, process, docker, lvm |
+| **Windows** | ipconfig, netstat, wmic, powershell, dns, bitsadmin |
+| **CCTV** | Hikvision ISAPI, Dahua CGI, RTSP |
+| **Docker/K8s** | docker, kubectl |
+| **Git** | config, branch, commit, remote, log, stash, tags |
+
+### 🔍 MAC Lookup
+
+Base de ~2500 OUI. Busca fabricante por MAC address.
+
+### 📋 Diagnóstico CCTV
+
+15 procedimientos guiados para troubleshooting de cámaras y NVRs:
+
+1. Cámara no enciende
+2. Cámara no muestra imagen
+3. Imagen borrosa / fuera de foco
+4. Visión nocturna no funciona
+5. Cámara se desconecta intermitentemente
+6. No se puede acceder vía web
+7. Cable de red dañado
+8. Puerto PoE no funciona
+9. Grabación no funciona
+10. Almacenamiento lleno
+11. Audio no funciona
+12. PTZ no responde
+13. Configuración de red perdida
+14. Cámara no responde a ping
+15. Fallo de alimentación
+
+### 🔌 Ancho de Banda
+
+Monitoreo de ancho de banda via SNMP.
+
+- Polling de interfaces (ifInOctets/ifOutOctets)
+- Gráfico en tiempo real (SVG)
+- Conversión a Mbps
+- Múltiples interfaces simultáneas
 
 ---
 
-## Test de Velocidad
+## API REST
 
-Mide descarga, subida, ping, servidor e **IP pública** usando **Python puro** (urllib + socket).  
-Sin dependencias externas — descarga archivos de prueba desde `speedtest.tele2.net`.  
-Se ejecuta en segundo plano — podés usar otras secciones mientras termina.  
-Guarda los últimos 10 resultados en el navegador.
+**115 endpoints** documentados. Todos responden en JSON.
 
----
-
-## Monitoreo Continuo
-
-Escanea una subred automáticamente cada cierto intervalo.  
-Detecta hosts nuevos y desconectados.  
-Notifica cambios mediante **ntfy.sh**.
-
-Se configura en Escáner → **⏱️ Monitoreo Continuo de Subred**.
-
----
-
-## SNMP
-
-Operaciones Walk, Get y Set sobre dispositivos SNMP.  
-Muestra sistema, interfaces, tabla MAC, rutas y almacenamiento.  
-Detecta fabricante y tipo de dispositivo (switch, router, CCTV, UPS).
-
----
-
-## Planificación IP (IPAM)
-
-Gestión local de redes, reservas IP, ámbitos DHCP, registros DNS (A, AAAA, CNAME, MX, TXT), VLANs y sitios.  
-Búsqueda de redes libres, sugerencia de IP disponible y cálculo de uso.  
-Persistencia en archivos JSON.
-
----
-
-## Topología
-
-Editor visual de topología de red con **Cytoscape.js**.
-
-- **Manual**: agregar nodos (router, switch, firewall, servidor, PC, AP, cámara, NVR, DVR, nube, área) y conexiones (Ethernet, fibra, WiFi)
-- **Auto-descubrir**: escaneo TCP de toda la subred + tabla ARP por SNMP + cache ARP local (Linux/Android `/proc/net/arp`, Windows/macOS `arp -a`). Detecta tipo, vendor y modelo de cada dispositivo
-- **Iconos SVG inline**: representaciones reales de cada dispositivo (router con antenas, switch con puertos, cámara, servidor, etc.)
-- **Estado en vivo**: ping a cada nodo
-- **Simulador**: animación de paquetes ICMP
-- **Guardar / Cargar**: persistencia en JSON
-
----
-
-## APIs CCTV
-
-Conéctate en vivo a **Hikvision** (ISAPI), **Dahua** (CGI) y **ZKTeco**.  
-Información del dispositivo, capturas de pantalla, eventos, PTZ, registros y almacenamiento.
-
-> Si da error 401, habilitar "Autenticación Básica" en la configuración web del dispositivo.
-
----
-
-## Control de Acceso
-
-**21 fabricantes** con conexión y comandos:
-
-Hikvision · Dahua · ZKTeco · Lenel · Paxton · HID · Gallagher · Avigilon · Aperio · Dormakaba · Schneider · JCI · Stanley · Bosch · Siemens · CDVI · SALTO · Nedap · 2N · Kantech · Wiegand
-
----
-
-## Diagnóstico
-
-**15 procedimientos guiados** y diagnóstico automático CCTV:
-
-- Diagnóstico de Red Básico
-- Cámara IP No Responde
-- Servidor Linux
-- Switch Cisco
-- Firewall FortiGate
-- Router MikroTik
-- Diagnóstico WiFi
-- Enlace de Fibra Óptica
-- DVR/NVR No Responde
-- UPS
-- Diagnóstico automático: ping + puertos + HTTP + API por fabricante
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/api/status` | GET | Estado del servidor |
+| `/api/protocols` | GET | Lista de protocolos |
+| `/api/protocols/<name>` | GET | Detalle de protocolo |
+| `/api/ports` | GET | Lista de puertos |
+| `/api/ports/<port>` | GET | Detalle de puerto |
+| `/api/commands` | GET | Lista de comandos por categoría |
+| `/api/calculators` | GET | Lista de calculadoras |
+| `/api/calculators/run` | POST | Ejecutar calculadora |
+| `/api/diagnostics` | GET | Lista de diagnósticos |
+| `/api/diagnostics/<name>` | GET | Detalle de diagnóstico |
+| `/api/diagnostics/cctv/*` | GET | Diagnóstico CCTV por fabricante |
+| `/api/cctv` | GET | Estado CCTV |
+| `/api/cctv/connect` | POST | Conectar cámara |
+| `/api/cctv/command` | POST | Comando CCTV |
+| `/api/access-control` | GET | Estado control de acceso |
+| `/api/access-control/connect` | POST | Conectar controlador |
+| `/api/access-control/command` | POST | Comando AC |
+| `/api/scanner/ping` | GET | Ping a host |
+| `/api/scanner/quick-scan` | GET | Escaneo rápido |
+| `/api/scanner/discover` | GET | Descubrir hosts en subred |
+| `/api/scanner/traceroute` | GET | Traceroute |
+| `/api/scanner/scan-ports` | GET | Escaneo de puertos TCP |
+| `/api/scanner/scan-ports-udp` | GET | Escaneo de puertos UDP |
+| `/api/scanner/scan-cctv` | GET | Detectar CCTV en host |
+| `/api/scanner/scan-ac` | GET | Detectar AC en host |
+| `/api/scanner/discover-cctv` | GET | Descubrir CCTV en subred |
+| `/api/scanner/compare` | POST | Comparar dos escaneos |
+| `/api/tools/dns` | GET | DNS lookup |
+| `/api/tools/dns/mx` | GET | MX records |
+| `/api/tools/ssl` | GET | SSL certificate check |
+| `/api/tools/http-headers` | GET | HTTP headers |
+| `/api/tools/whois` | GET | WHOIS lookup |
+| `/api/tools/wol` | POST | Wake-on-LAN |
+| `/api/tools/token` | GET | Generar token |
+| `/api/tools/local-ip` | GET | IP local |
+| `/api/tools/ntp` | GET | Consulta NTP |
+| `/api/tools/port-knock` | POST | Port knocking |
+| `/api/tools/http-status` | GET | HTTP status code |
+| `/api/tools/ping-latency` | GET | Latencia continua |
+| `/api/snmp/info` | GET | Info SNMP + MIBs |
+| `/api/snmp/get` | GET | SNMP get |
+| `/api/snmp/walk` | GET | SNMP walk |
+| `/api/snmp/check` | GET | SNMP check |
+| `/api/snmp/system` | GET | SNMP system info |
+| `/api/snmp/interfaces` | GET | SNMP interfaces |
+| `/api/snmp/detect-device` | GET | Detectar fabricante |
+| `/api/snmp/cctv-info` | GET | Info CCTV via SNMP |
+| `/api/wifi/scan` | GET | Escanear WiFi |
+| `/api/wifi/interfaces` | GET | Interfaces WiFi |
+| `/api/dhcp/discover` | GET | DHCP discover |
+| `/api/bandwidth/poll` | GET | Polling ancho de banda |
+| `/api/bandwidth/traffic` | GET | Tráfico actual |
+| `/api/ipam/*` | GET/POST/DELETE | IPAM completo |
+| `/api/topology/*` | GET/POST/DELETE | Topología |
+| `/api/scripts` | GET | Scripts disponibles |
+| `/api/scripts/<cat>/<func>` | GET | Código de script |
+| `/api/mac-lookup` | GET | MAC OUI lookup |
+| `/api/tasks` | GET | Tareas activas |
+| `/api/speedtest` | POST | Ejecutar speedtest |
+| `/api/monitor/*` | GET/POST | Monitoreo continuo |
+| `/api/ups/*` | GET | UPS diagnostics |
+| `/api/ups/zabbix/*` | GET/POST | Integración Zabbix |
 
 ---
 
-## Diagnóstico de UPS
+## Stack Técnico
 
-Manual interactivo completo con 8 secciones:
+```
+Backend:    Flask + Python estándar (socket, ssl, ipaddress, threading, urllib)
+Frontend:   Vanilla JS + Cytoscape.js + CSS custom properties (5 temas)
+APK:        Chaquopy (Python 3.11) + WebView + WifiManager bridge Java
+PWA:        manifest.json + service worker (caché + offline)
+```
 
-1. **🔍 Inspección Física** — luces, pitidos, ventilador, cables, olores
-2. **📊 Análisis de Estado** — tensión, carga, batería, temperatura
-3. **🔋 Pruebas de Batería** — rápida, profunda, tiempo real, tensión en reposo
-4. **⚠️ Síntomas y Soluciones** — 8 problemas comunes con causa y solución
-5. **🛠️ Mantenimiento Preventivo** — limpieza, ciclo de batería, reemplazo
-6. **📋 Árbol de Decisiones** — flujo para diagnosticar paso a paso
-7. **🔧 Comandos** — NUT, APC, CyberPower, SNMP
-8. **Soluciones Paso a Paso** — 7 guías detalladas:
+### Implementaciones puras (sin binarios externos)
 
-   | Guía | Pasos |
-   |------|-------|
-   | Reemplazar batería VRLA | 11 pasos con advertencias de seguridad |
-   | Cambiar fusible interno | 10 pasos + qué hacer si vuelve a quemarse |
-   | Reemplazar ventilador | 8 pasos con verificación de flujo de aire |
-   | UPS no enciende | 9 pasos: toma → fusible → batería → placa |
-   | No cambia a batería | 7 pasos: conexiones → tensión → relé → inversor |
-   | Autonomía reducida | 8 pasos con pruebas de carga y temperatura |
-   | Reset por software | NUT, APC, CyberPower y reset físico |
+- **SNMP:** BER encoder/decoder ASN.1 sobre UDP socket
+- **Speedtest:** 6 streams paralelos, urllib, threading
+- **Ping:** TCP connect (sin ICMP requerido)
+- **Traceroute:** IP_TTL + UDP probes
+- **DHCP:** DHCPDISCOVER broadcast
+- **NUT:** TCP raw (puerto 3493)
+- **DNS, SSL, HTTP, WOL:** socket + ssl + http.client
+- **QR:** BarcodeDetector API + jsQR fallback
 
----
+### Dependencias
 
-## Comandos
+```
+flask>=3.0.0
+requests>=2.31.0
+```
 
-Comandos organizados por fabricante con búsqueda integrada:
-
-Cisco · MikroTik · Fortinet · Linux · Windows · CCTV
-
-También: Docker, Git, Kubernetes, MySQL, PostgreSQL, MongoDB, AWS, Azure, GCP, VMware, Proxmox, VirtualBox, Python/Dev, Prometheus, Grafana, ELK, Zabbix.
-
----
-
-## Protocolos y Puertos
-
-- **59 protocolos** con puerto, transporte y capa OSI
-- **644 puertos** comunes con servicio asociado
-- Búsqueda por nombre, número o servicio
-
----
-
-## Calculadoras
-
-| Categoría | Calculadoras |
-|-----------|-------------|
-| **Redes** | Subredes, VLSM, ancho de banda, tiempo de transferencia, CIDR/máscara |
-| **Conversión** | Bytes, temperatura, dBm↔mW, AWG↔mm² |
-| **Electrónica** | Ley de Ohm, divisor de tensión, baterías, paneles solares |
-| **CCTV** | Almacenamiento y ancho de banda (12 resoluciones × 6 códecs), RAID, PoE |
-
----
-
-## MAC Lookup
-
-Base de ~2500 OUI. Buscar por MAC o por nombre de fabricante.
-
----
-
-## WiFi
-
-Escáner WiFi multiplataforma:
-
-| Plataforma | Método | Requisitos |
-|-----------|--------|------------|
-| **APK Android** | WifiManager nativo vía `TechBotBridge.java` | WiFi encendido + permiso **Ubicación** (Android 10+ obliga para scan WiFi) |
-| **Termux** | `termux-wifi-scaninfo` | `pkg install termux-api && termux-wifi-scaninfo` |
-| **Linux** | `iw` → `iwlist` | `cap_net_admin` en `iw` |
-| **Windows** | `netsh wlan show networks mode=bssid` | — |
-| **macOS** | `airport` | — |
-
-Detección automática de interfaz + señal RSSI a porcentaje (0-100%) + conversión frecuencia→canal.
-
----
-
-- Monitoreo UPS a través de **Zabbix API** (HTTP)
-- Integración con **Zabbix** (hosts, problemas, alertas por ntfy.sh)
-- Cliente NUT por TCP puro (puerto 3493, sin binarios)
-- Estimación de vida de batería
-
----
-
-## Scripts Python
-
-Funciones de Network, DHCP, DNS, Seguridad y Sistema.  
-Código visible y copiable desde la interfaz.
-
----
-
-## PWA (App Instalable)
-
-TechBot es una **Progressive Web App**:
-
-- `manifest.json` con icono SVG
-- Service worker: caché de estáticos, red primero para API
-- Modo offline: protocolos, puertos y referencias funcionan sin internet
-
-En Chrome Android: menú → "Agregar a pantalla de inicio".
+Todo lo demás usa librería estándar de Python.
 
 ---
 
 ## APK Android
 
-El directorio `android/` contiene un proyecto Android Studio con **Chaquopy** (Python embebido).
+Proyecto Android Studio con Chaquopy (Python 3.11 embebido).
 
-**Características:**
-- WebView a pantalla completa con barra de URL
-- Servidor Flask embebido (Python vía Chaquopy)
-- **WifiManager nativo** vía `TechBotBridge.java` para scan WiFi sin root
-- **Cámara** para lector QR
-- URL configurable (localhost o servidor remoto)
-- Tema oscuro, orientación adaptable
-- Sin dependencias externas
+- WebView fullscreen (sin barra de URL visible)
+- Servidor Flask embebido (inicio automático)
+- WifiManager nativo vía TechBotBridge.java
+- Cámara para QR
+- Tema oscuro
+- Orientación adaptable
 
-**Compilar:**
+### Build
+
 ```bash
 export ANDROID_HOME=$HOME/Android/Sdk
 cd android
 ./build-apk.sh
+# APK en: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-**Instalar:**
+### Requisitos
+
+- Android Studio + SDK 24+
+- Chaquopy plugin 15.0.1
+
+---
+
+## Despliegue
+
+### Producción (Flask)
 ```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
+pip install -r requirements.txt
+python run_webapp.py
+# Por defecto en 0.0.0.0:5000
 ```
 
----
-
-## Dependencias
-
-```txt
-flask>=3.0.0
-requests>=2.31.0
+### Con Gunicorn
+```bash
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 run_webapp:app
 ```
 
-Todo lo demás usa **librería estándar de Python** (socket, ssl, ipaddress, threading, urllib, etc.).  
-No requiere bins externos obligatorios.
-
-**SNMP, Speedtest, NUT, DHCP, Traceroute** — implementaciones puras en Python (sin subprocess).  
-**WiFi** — WifiManager nativo (APK) + iw/iwlist (Linux) + netsh (Windows) + airport (macOS) + termux-api (Termux).
-
----
-
-## Arquitectura
-
+### Docker (opcional)
+```dockerfile
+FROM python:3.11-slim
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+EXPOSE 5000
+CMD ["python", "run_webapp.py"]
 ```
-run_webapp.py          → Inicia el servidor Flask
-webapp/
-  app.py               → 80+ rutas API
-  static/
-    css/style.css      → Estilos responsivos
-    js/app.js          → Frontend completo (JavaScript vanilla)
-    manifest.json      → Manifiesto PWA
-    sw.js              → Service worker
-    icons/             → Iconos
-  templates/
-    index.html         → Plantilla HTML
-techbot/
-  scanner/             → Escáner de red (TCP ping, puertos, traceroute)
-  tools.py             → DNS, SSL, WOL, HTTP, Token, IP local
-  monitor.py           → Monitoreo continuo de subred
-  tasks.py             → Tareas en segundo plano
-  speedtest.py         → Test de velocidad
-  wifi.py              → Escáner WiFi (4 plataformas)
-  dhcp.py              → Descubrimiento DHCP
-  snmp/                → Operaciones SNMP (BER puro)
-  ipam/                → Planificación IP
-  topology/            → Editor de topología + auto-descubrimiento
-  protocols/           → Base de protocolos y puertos
-  commands/            → Comandos por fabricante
-  calculators/         → Calculadoras técnicas
-  diagnostics/         → Procedimientos de diagnóstico
-  apis/                → Clientes CCTV (Hikvision, Dahua, ZKTeco)
-  access_control/      → Control de acceso (21 fabricantes)
-  scripts/             → Scripts Python
-  mac_lookup.py        → Base OUI
-  ups/                 → Monitoreo UPS + manual de diagnóstico
-  zabbix/              → Integración Zabbix
-android/               → Proyecto APK Android
-```
-
----
-
-## Licencia
-
-Uso interno y educativo.

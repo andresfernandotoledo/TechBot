@@ -1,0 +1,70 @@
+[
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/drawable_ic_launcher_background.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/xml_network_security_config.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/layout_activity_main.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.techbot.app-merged_res-21:/layout_activity_main.xml.flat",
+        "source": "com.techbot.app-main-23:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "/home/andres/.gradle/daemon/8.1/com.techbot.app-merged_res-21:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "/home/andres/.gradle/daemon/8.1/com.techbot.app-main-23:/mipmap-xxxhdpi/ic_launcher.png"
+    }
+]

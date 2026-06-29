@@ -1,0 +1,109 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.techbot.app"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:3:5-67
+11-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:3:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:4:5-79
+12-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:4:22-76
+13    <uses-permission android:name="android.permission.CAMERA" />
+13-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:5:5-65
+13-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:5:22-62
+14    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+14-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:6:5-76
+14-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:6:22-73
+15    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+15-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:7:5-76
+15-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:7:22-73
+16    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+16-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:8:5-79
+16-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:8:22-76
+17    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+17-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:9:5-81
+17-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:9:22-78
+18
+19    <permission
+19-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:22:5-24:47
+20        android:name="com.techbot.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+20-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:23:9-81
+21        android:protectionLevel="signature" />
+21-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:24:9-44
+22
+23    <uses-permission android:name="com.techbot.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+23-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:26:5-97
+23-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:26:22-94
+24
+25    <application
+25-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:11:5-30:19
+26        android:allowBackup="true"
+26-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:12:9-35
+27        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+27-->[androidx.core:core:1.9.0] /home/andres/.gradle/caches/transforms-3/2aade88a021cf1fe8ebd2f578221be42/transformed/core-1.9.0/AndroidManifest.xml:28:18-86
+28        android:debuggable="true"
+29        android:extractNativeLibs="false"
+30        android:icon="@mipmap/ic_launcher"
+30-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:13:9-43
+31        android:label="@string/app_name"
+31-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:14:9-41
+32        android:networkSecurityConfig="@xml/network_security_config"
+32-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:18:9-69
+33        android:supportsRtl="true"
+33-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:15:9-35
+34        android:theme="@style/Theme.PilotEye"
+34-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:16:9-46
+35        android:usesCleartextTraffic="true" >
+35-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:17:9-44
+36        <activity
+36-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:20:9-29:20
+37            android:name="com.techbot.app.MainActivity"
+37-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:21:13-41
+38            android:configChanges="orientation|screenSize|keyboardHidden"
+38-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:24:13-74
+39            android:exported="true"
+39-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:22:13-36
+40            android:screenOrientation="fullSensor" >
+40-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:23:13-51
+41            <intent-filter>
+41-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:25:13-28:29
+42                <action android:name="android.intent.action.MAIN" />
+42-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:26:17-69
+42-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:26:25-66
+43
+44                <category android:name="android.intent.category.LAUNCHER" />
+44-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:27:17-77
+44-->/home/andres/Escritorio/boot tecnico/android/app/src/main/AndroidManifest.xml:27:27-74
+45            </intent-filter>
+46        </activity>
+47
+48        <provider
+48-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+49            android:name="androidx.startup.InitializationProvider"
+49-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:25:13-67
+50            android:authorities="com.techbot.app.androidx-startup"
+50-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:26:13-68
+51            android:exported="false" >
+51-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:27:13-37
+52            <meta-data
+52-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+53                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+53-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:30:17-75
+54                android:value="androidx.startup" />
+54-->[androidx.emoji2:emoji2:1.2.0] /home/andres/.gradle/caches/transforms-3/eef02876c06fc4e39a09f39e81e40dda/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:31:17-49
+55            <meta-data
+55-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/andres/.gradle/caches/transforms-3/8ea73b818cf9c383dc88b0fcc26cb3cb/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:31:13-33:52
+56                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+56-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/andres/.gradle/caches/transforms-3/8ea73b818cf9c383dc88b0fcc26cb3cb/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:32:17-78
+57                android:value="androidx.startup" />
+57-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/andres/.gradle/caches/transforms-3/8ea73b818cf9c383dc88b0fcc26cb3cb/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:33:17-49
+58        </provider>
+59    </application>
+60
+61</manifest>

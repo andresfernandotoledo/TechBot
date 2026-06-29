@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#1A237E</color>
+    <string name="app_name">PilotEye</string>
+    <style name="Theme.PilotEye" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">#1a1a2e</item>
+        <item name="android:statusBarColor">#0f3460</item>
+        <item name="android:navigationBarColor">#0f3460</item>
+    </style>
+</resources>
